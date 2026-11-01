@@ -200,6 +200,19 @@ function omrReadDigits(ink, x0, y0, x1, y1, minGap) {
   return { text, score: sc };
 }
 
+/* 拍子記号用: 読める数字を候補に限って、書体見本との近さで読む(五線や隣の数字に重なって形がくずれても強い) */
+function omrReadTsDigits(ink, x0, y0, x1, y1, minGap, cands) {
+  const cols = []; for (let x = x0; x <= x1; x++) { let n = 0; for (let y = y0; y <= y1; y++) if (ink(x, y)) n++; cols.push(n > 0); }
+  const segs = []; for (let i = 0; i < cols.length;) { if (!cols[i]) { i++; continue; } let j = i; while (j + 1 < cols.length) { if (cols[j + 1]) { j++; continue; } let k = j + 1; while (k < cols.length && !cols[k]) k++; if (k - j - 1 >= minGap || k >= cols.length) break; j = k; } segs.push([x0 + i, x0 + j]); i = j + 1; }
+  if (!segs.length || segs.length > 2) return null;
+  let text = "";
+  for (let i = 0; i < segs.length; i++) {
+    const v = omrVecOf(ink, segs[i][0], y0, segs[i][1], y1, 10, 16); if (!v) return null;
+    const c = segs.length === 2 ? (i === 0 ? ["1"] : ["2"]) : cands, r = omrMatch(v, c, 10, 16); if (!r.text) return null; text += r.text;
+  }
+  return { text };
+}
+
 function omrAnalyzeStaff(bin, w, h, st) {
   const S = st.S, y0 = st.lines[0], y4 = st.lines[4], log = [];
   // (1) 小節線: 五線の上端〜下端を全部埋める縦線
@@ -238,7 +251,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
   merged.forEach(b => { for (let x = b.a - 1; x <= b.b + 1; x++) if (x >= rx0 && x <= rx1) for (let y = Math.max(ry0, top - 2); y <= Math.min(ry1, bot + 2); y++) B[(y - ry0) * rw + (x - rx0)] = 0; });
 
   // (4b) 音部記号・拍子記号の範囲: 左端から続く「五線の外に符幹がのびていない」かたまり
-  const inA = Math.round(y0 - 0.4 * S) - ry0, inB = Math.round(y4 + 0.4 * S) - ry0, outA = Math.round(y0 - 4.6 * S) - ry0, outA2 = Math.round(y0 - 0.6 * S) - ry0, outB = Math.round(y4 + 0.6 * S) - ry0, outB2 = Math.round(y4 + 3.8 * S) - ry0;
+  const inA = Math.round(y0 - 0.4 * S) - ry0, inB = Math.round(y4 + 0.4 * S) - ry0, outA = Math.round(y0 - 1.1 * S) - ry0, outA2 = Math.round(y0 - 0.6 * S) - ry0, outB = Math.round(y4 + 0.6 * S) - ry0, outB2 = Math.round(y4 + 3.8 * S) - ry0;
   const colIn = new Uint8Array(rw), colOut = new Uint8Array(rw);
   for (let x = 0; x < rw; x++) {
     const need = Math.max(2, Math.round(0.2 * S)); let n = 0;
@@ -267,7 +280,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
   const readTs = (xa, xb) => {                                  // 範囲内の拍子記号(上の数字/下の数字)を読む
     const clean = (x, y) => { for (const [a, b] of st.band) if (y >= a && y <= b) return bin[(a - 1) * w + x] === 1 || bin[(b + 1) * w + x] === 1; return bin[y * w + x] === 1; };   // 五線の線は、上か下が黒い所だけ数字の一部とみなす
     const topI = (x, y) => y <= y2 && y >= y0 - 0.1 * S && clean(x, y), botI = (x, y) => y >= y2 + 1 && y <= y4 + 0.5 * S && clean(x, y), gap = Math.max(1, Math.round(0.12 * S));
-    const t = omrReadDigits(topI, xa, Math.round(y0 - 0.1 * S), xb, Math.round(y2), gap), b = omrReadDigits(botI, xa, Math.round(y2 + 1), xb, Math.round(y4 + 0.5 * S), gap);
+    const t = omrReadTsDigits(topI, xa, Math.round(y0 - 0.1 * S), xb, Math.round(y2), gap, "234567".split("")), b = omrReadTsDigits(botI, xa, Math.round(y2 + 1), xb, Math.round(y4 + 0.5 * S), gap, "248".split(""));
     if (!t || !b) return null; const key = t.text + "/" + b.text; return TIME_SIGS[key] ? key : null;
   };
   for (let m = 1; m < barX.length - 1; m++) {
