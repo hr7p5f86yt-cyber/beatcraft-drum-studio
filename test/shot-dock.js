@@ -1,0 +1,2 @@
+const { chromium } = require("playwright");
+(async()=>{const b=await chromium.launch();for(const [w,h,n] of [[1180,820,"ipadL"],[820,1100,"ipadP"],[1366,768,"pc"]]){const p=await b.newPage({viewport:{width:w,height:h}});await p.goto("file://"+process.cwd()+"/index.html");await p.waitForTimeout(400);await p.screenshot({path:"out/dock-"+n+".png"});console.log(n,await p.evaluate(()=>[document.getElementById("dock").getBoundingClientRect().top,document.getElementById("scoreSvg").getBoundingClientRect().top]));}await b.close()})()

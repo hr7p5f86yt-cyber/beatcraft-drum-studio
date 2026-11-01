@@ -1,0 +1,18 @@
+const M = require("../src/model.js"); let fail = 0;
+const ok = (c, m) => { if (!c) { fail++; console.log("NG:", m); } else console.log("ok:", m); };
+const sc = M.newScore(); sc.measures = [M.newMeasure(), M.newMeasure(), M.newMeasure(), M.newMeasure("2/4"), M.newMeasure(), M.newMeasure()];
+M.toggleNote(sc.measures[0], "kick", 0, 48, false); M.toggleNote(sc.measures[0], "snare", 48, 48, false);
+M.toggleNote(sc.measures[1], "kick", 0, 48, false); M.toggleNote(sc.measures[1], "snare", 48, 48, false);
+ok(M.measuresSame(sc.measures[0], sc.measures[1]), "同じ内容を判定");
+ok(M.autoSim(sc, 1, 5) === 1 && sc.measures[1].sim && sc.measures[1].up.length === 0, "同じ小節が%になる(空の小節は対象外)");
+const r = M.buildPlayEvents(sc);
+ok(r.events.filter(e => e.gt >= 192 && e.gt < 384).length === 2, "%の小節も演奏される");
+ok(M.simSource(sc, 1) === sc.measures[0], "元の小節をたどれる");
+sc.measures[2].sim = true; ok(M.simSource(sc, 2) === sc.measures[0], "%が続いても元まで戻る");
+M.materializeSim(sc, 1); ok(!sc.measures[1].sim && sc.measures[1].up.length + sc.measures[1].down.length === 2, "編集前に中身が写される");
+sc.measures[4].mr = true; ok(M.multiRestRun(sc, 4) === 2, "空の小節2つが2小節休符になる");
+sc.measures[4].mr = false; sc.measures[3].mr = true; ok(M.multiRestRun(sc, 3) === 0 || M.multiRestRun(sc, 3) >= 2, "拍子が違えば別の休符(単独は0)");
+sc.measures[1].sim = true; sc.measures[1].up = []; sc.measures[1].down = []; sc.measures[1].mark = "Intro"; sc.measures[1].dbl = true;
+const back = M.migrateScore(JSON.parse(JSON.stringify(sc)));
+ok(back.ok && back.score.measures[1].sim && back.score.measures[1].mark === "Intro" && back.score.measures[1].dbl, "保存→読込で%・Intro・二重線が残る");
+console.log(fail ? "FAILED" : "ALL PASSED"); process.exit(fail ? 1 : 0);

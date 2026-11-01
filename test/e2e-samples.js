@@ -1,0 +1,21 @@
+const { chromium } = require("playwright"); let fail = 0;
+const ok = (c, m) => { if (!c) { fail++; console.log("NG:", m); } else console.log("ok:", m); };
+(async () => {
+  const b = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] }), ctx = await b.newContext(), p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
+  const url = "file://" + process.cwd() + "/index.html";
+  await p.goto(url); await p.evaluate(() => document.body.classList.add("show-adv"));
+  await p.click("#sampleBtn");
+  await p.setInputFiles("#smpBulk", ["out/wav/hihat_closed_1.wav", "out/wav/hihat_closed_2.wav", "out/wav/hihat_closed_3.wav", "out/wav/crash_1.wav", "out/wav/mystery.wav"]);
+  await p.waitForFunction(() => /追加/.test(document.getElementById("smpStatus").textContent), null, { timeout: 20000 });
+  const kit = await p.evaluate(() => Object.fromEntries(Object.entries(SAMPLES.kit).map(([k, l]) => [k, l.map(x => Math.round(x.rms * 1000))])));
+  ok(kit.hh_close && kit.hh_close.length === 3 && kit.crash.length === 1 && !kit.kick, "ファイル名から自動で振り分け(判定できないものは除外) " + JSON.stringify(kit));
+  ok(kit.hh_close[0] < kit.hh_close[1] && kit.hh_close[1] < kit.hh_close[2], "音の大きさ順(弱→強)に並ぶ");
+  ok(/判定できません|mystery/.test(await p.textContent("#smpStatus")), "判定できなかったファイルが知らされる");
+  const used = await p.evaluate(() => { initAudio(); const seen = []; const orig = audioCtx.createBufferSource.bind(audioCtx); audioCtx.createBufferSource = () => { const s = orig(); seen.push(s); return s; }; playSound("hh_close", 0, 20); playSound("hh_close", 0, 125); playSound("kick", 0, 90); const l = SAMPLES.kit.hh_close; return [seen[0].buffer === l[0].buf || seen[0].buffer === l[1].buf, seen[1].buffer === l[2].buf || seen[1].buffer === l[1].buf, !SAMPLES.kit.kick && seen[2].buffer.sampleRate === 44100]; });
+  ok(used[0] && used[1] && used[2], "強さに応じてサンプルが選ばれ、サンプルのないパーツは合成音のまま " + used);
+  await p.waitForTimeout(500); await p.reload(); await p.waitForTimeout(1500);
+  ok(await p.evaluate(() => (SAMPLES.kit.hh_close || []).length) === 3, "再読み込みしても保存された録音の音が使われる");
+  await p.evaluate(() => document.body.classList.add("show-adv")); await p.click("#sampleBtn"); p.once("dialog", d => d.accept()); await p.click("#smpClear");
+  ok(await p.evaluate(() => Object.keys(SAMPLES.kit).length) === 0, "すべて合成音に戻せる");
+  ok(errs.length === 0, "エラーなし " + errs); console.log(fail ? "FAILED" : "ALL PASSED"); await b.close();
+})();

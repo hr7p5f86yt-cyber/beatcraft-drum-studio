@@ -1,0 +1,23 @@
+const { chromium } = require("playwright"); let fail = 0;
+const ok = (c, m) => { if (!c) { fail++; console.log("NG:", m); } else console.log("ok:", m); };
+(async () => {
+  const b = await chromium.launch(), ctx = await b.newContext({ viewport: { width: 820, height: 1100 }, hasTouch: true, isMobile: true }), p = await ctx.newPage();
+  const errs = []; p.on("pageerror", e => errs.push(e.message));
+  await p.goto("file://" + process.cwd() + "/index.html"); await p.waitForTimeout(300);
+  const tap = t => p.locator("#dock").getByText(t, { exact: true }).tap();
+  const sc = () => p.evaluate(() => JSON.parse(JSON.stringify(state.score.measures[0])));
+  await tap("8分"); for (let i = 0; i < 4; i++) await p.locator('[data-dinst="hh_close"]').tap();
+  let m = await sc(); ok(m.up.length === 4 && m.up[3].t === 72, "ハイハットのパッドで8分が4つ、自動で進む");
+  await p.locator('[data-dinst="kick"]').tap(); await p.locator('[data-dinst="snare"]').tap();
+  m = await sc(); ok(m.down.length === 1 && m.up.some(n => n.t === 120 && n.i.includes("snare")), "キック・スネアも入力できる");
+  await tap("⌫"); m = await sc(); ok(!m.up.some(n => n.i.includes("snare") && n.t === 120) , "⌫でカーソル手前を消せる");
+  await tap("範囲選択"); await tap("◀"); await tap("◀");
+  ok(await p.evaluate(() => !!state.anchor), "範囲選択で範囲ができる");
+  await tap("範囲選択"); await tap("小節選択");
+  ok(await p.evaluate(() => state.anchor && state.anchor.t === 0 && state.cursor.t > 0), "小節選択");
+  await tap("＋"); ok(await p.evaluate(() => state.zoom > 1), "拡大");
+  await tap("↩"); await tap("↩");
+  ok(errs.length === 0, "エラーなし " + errs);
+  await p.screenshot({ path: "out/dock-touch.png" });
+  console.log(fail ? "FAILED" : "ALL PASSED"); await b.close();
+})();

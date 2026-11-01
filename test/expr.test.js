@@ -1,0 +1,11 @@
+const M = require("../src/model.js"); let fail = 0;
+const ok = (c, m) => { if (!c) { fail++; console.log("NG:", m); } else console.log("ok:", m); };
+const info = M.tsInfo("4/4"), e = (i, t, n) => M.expressionFor(i, t, info, n);
+ok(e("hh_close", 0).dv > e("hh_close", 48).dv && e("hh_close", 48).dv > e("hh_close", 24).dv, "ハイハット: 小節頭 > 拍頭 > 裏拍");
+ok(e("hh_close", 12).dv < e("hh_close", 24).dv, "ハイハット: 16分の細かい音はさらに弱い");
+ok(e("snare", 48).dt > 0 && e("snare", 0).dt >= 0 && e("snare", 48).dv > e("snare", 0).dv, "スネア: バックビートは強く少し遅れる");
+ok(e("snare", 48, { gh: true }).dv === 0, "ゴースト音は表情で強くならない");
+ok(e("kick", 0).dt < 0 && e("kick", 0).dv > e("kick", 24).dv, "キック: 少し前のめり・小節頭が強い");
+const sc = M.newScore(); M.toggleNote(sc.measures[0], "hh_close", 0, 24, false);
+ok(M.buildPlayEvents(sc).events[0].dv === undefined && M.buildPlayEvents(sc, { expr: true }).events[0].dv.length === 1, "表情はオプションで切り替わる");
+console.log(fail ? "FAILED" : "ALL PASSED"); process.exit(fail ? 1 : 0);
