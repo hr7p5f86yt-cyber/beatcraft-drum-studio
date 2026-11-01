@@ -208,7 +208,12 @@ function omrReadTsDigits(ink, x0, y0, x1, y1, minGap, cands) {
   let text = "";
   for (let i = 0; i < segs.length; i++) {
     const v = omrVecOf(ink, segs[i][0], y0, segs[i][1], y1, 10, 16); if (!v) return null;
-    const c = segs.length === 2 ? (i === 0 ? ["1"] : ["2"]) : cands, r = omrMatch(v, c, 10, 16); if (!r.text) return null; text += r.text;
+    const c = segs.length === 2 ? (i === 0 ? ["1"] : ["2"]) : cands;
+    let best = null, bs = -9;                                       // 一番ふつうの「4」には少し加点(4/4を6/4と読みちがえにくくする)
+    c.forEach(t => { const r1 = omrMatch(v, [t], 10, 16), sc = r1.score + (t === "4" ? 0.12 : 0); if (r1.text && sc > bs) { bs = sc; best = t; } });
+    if (!best) return null;
+    if (best === "6" || best === "9") { const sh = omrDigitShape(ink, segs[i][0], y0, segs[i][1], y1); if (sh && sh.digit === "4" && c.indexOf("4") >= 0) best = "4"; }
+    text += best;
   }
   return { text };
 }
