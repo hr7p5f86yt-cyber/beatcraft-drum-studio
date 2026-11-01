@@ -109,8 +109,9 @@ function applyImport() {
   Player.stop(); hidePlayhead();
   if (mode === "replace") state.score.measures = ms; else state.score.measures.push(...ms);
   state.cursor = { m: mode === "replace" ? 0 : state.score.measures.length - ms.length, t: 0 }; state.anchor = null;
+  if (mode === "replace" && IMP.res.bpm >= 30 && IMP.res.bpm <= 300) state.score.bpm = Math.max(40, Math.min(240, IMP.res.bpm));
   commit(); closeModal("importModal");
-  showStatus(`${ms.length}小節を取り込みました。「↩ 戻す」で取り込み前に戻せます`);
+  showStatus(`${ms.length}小節を取り込みました${mode === "replace" && IMP.res.bpm ? "(テンポ" + IMP.res.bpm + ")" : ""}。「↩ 戻す」で取り込み前に戻せます`);
 }
 
 function bindImport() {

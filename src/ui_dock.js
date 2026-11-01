@@ -44,9 +44,13 @@ function bpmBox() {
   return w;
 }
 function setZoom(z) {
-  state.zoom = Math.max(0.6, Math.min(2.4, Math.round(z * 10) / 10));
-  const s = $("scoreSvg"); if (s) s.style.minWidth = Math.round(860 * state.zoom) + "px";
-  showStatus("拡大率 " + Math.round(state.zoom * 100) + "%");
+  state.zoom = Math.max(0.5, Math.min(2.4, Math.round(z * 10) / 10));
+  applyZoom(); showStatus("拡大率 " + Math.round(state.zoom * 100) + "%");
+}
+/* 拡大率 100% = 画面の幅いっぱい。60% なら画面幅の6割、200% なら2倍の幅(はみ出す分は横にスクロール) */
+function applyZoom() {
+  const s = $("scoreSvg"); if (!s) return;
+  s.style.width = Math.round(state.zoom * 100) + "%"; s.style.minWidth = Math.round(860 * Math.min(1, state.zoom)) + "px";
 }
 function updateDock() {
   const d = $("dock"); if (!d) return;

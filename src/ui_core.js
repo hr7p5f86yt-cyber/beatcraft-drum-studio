@@ -28,6 +28,7 @@ function renderAll() {
   $("scoreHost").innerHTML = `<svg id="scoreSvg" viewBox="0 0 ${r.width} ${r.height}" xmlns="http://www.w3.org/2000/svg">${r.svg}<g id="overlay" pointer-events="none"></g><line id="playhead" x1="0" y1="0" x2="0" y2="0" stroke="#2563eb" stroke-width="2" opacity="0.65" visibility="hidden"/></svg>`;
   $("titleInput").value = state.score.title;
   $("bpmVal").textContent = state.score.bpm; $("bpmRange").value = state.score.bpm;
+  if (typeof applyZoom === "function") applyZoom();
   updateButtons(); drawOverlay();
 }
 function scheduleRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; renderAll(); }); }

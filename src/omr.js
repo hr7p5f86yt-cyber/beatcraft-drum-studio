@@ -110,6 +110,96 @@ function omrFindStaves(bin, w, h) {
 }
 
 /* ---- 1つの五線を解析して符頭を探す ---- */
+
+/* ===== 文字・数字の読み取り(拍子記号・N小節休符の数・リハーサル記号・テンポ) =====
+ * ブラウザの canvas で作った見本の文字と、画像から切り出した文字を、似ているかどうかで比べる(簡易)。 */
+const OMR_WORDS = ["Intro", "Verse", "Chorus", "Bridge", "Outro", "Solo", "Fill", "Coda", "Break", "Pre", "End", "Interlude", "Tag", "Ending"];
+const OMR_TPL = {};
+function omrVecOf(ink, x0, y0, x1, y1, W, H) {                          // 範囲内の黒を囲む最小の四角を W×H に縮めた特徴(平均0・長さ1)
+  let a = x1, b = x0, c = y1, d = y0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (ink(x, y)) { if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > d) d = y; }
+  if (b < a || d < c) return null;
+  const bw = b - a + 1, bh = d - c + 1, v = new Float32Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const xa = a + Math.floor(i * bw / W), xb = a + Math.max(Math.floor(i * bw / W), Math.ceil((i + 1) * bw / W) - 1), ya = c + Math.floor(j * bh / H), yb = c + Math.max(Math.floor(j * bh / H), Math.ceil((j + 1) * bh / H) - 1);
+    let n = 0, t = 0; for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) { t++; if (ink(x, y)) n++; }
+    v[j * W + i] = n / Math.max(1, t);
+  }
+  for (let pass = 0; pass < 2; pass++) {                                 // 軽くぼかす(線の太さ・書体のちがいに強くする)
+    const o = new Float32Array(v.length);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let t = 0, n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= W || jj >= H) continue; const wgt = (di === 0 && dj === 0) ? 2 : 1; t += v[jj * W + ii] * wgt; n += wgt; } o[j * W + i] = t / n; }
+    v.set(o);
+  }
+  let m = 0; for (let i = 0; i < v.length; i++) m += v[i]; m /= v.length;
+  let nr = 0; for (let i = 0; i < v.length; i++) { v[i] -= m; nr += v[i] * v[i]; } nr = Math.sqrt(nr) || 1; for (let i = 0; i < v.length; i++) v[i] /= nr;
+  return { v, ar: bw / bh, a, b, c, d };
+}
+function omrTemplate(text, W, H) {
+  const key = text + "|" + W + "x" + H; if (OMR_TPL[key] !== undefined) return OMR_TPL[key];
+  const cv = document.createElement("canvas"), fs = 90; cv.width = Math.ceil(fs * 0.75 * text.length) + 40; cv.height = 140;
+  const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = "#000"; g.font = "bold " + fs + "px 'Times New Roman','Noto Serif JP',Georgia,serif"; g.textBaseline = "alphabetic"; g.fillText(text, 20, 105);
+  const d = g.getImageData(0, 0, cv.width, cv.height).data;
+  return (OMR_TPL[key] = omrVecOf((x, y) => d[(y * cv.width + x) * 4] < 128, 0, 0, cv.width - 1, cv.height - 1, W, H));
+}
+function omrMatch(vec, cands, W, H) {                                   // 一番似ている文字と、その点数
+  let best = null, bs = -9, second = -9;
+  cands.forEach(t => { const tp = omrTemplate(t, W, H); if (!tp) return; let dot = 0; for (let i = 0; i < vec.v.length; i++) dot += vec.v[i] * tp.v[i]; dot -= 0.3 * Math.abs(Math.log(vec.ar / tp.ar)); if (dot > bs) { second = bs; bs = dot; best = t; } else if (dot > second) second = dot; });
+  return { text: best, score: bs, margin: bs - second };
+}
+
+/* 数字1つを、形の特徴(穴の数・位置、上下の横棒、縦の棒、左上の縦線)で読む。書体がちがっても読めるようにするため。
+ * 範囲 [x0..x1]×[y0..y1] に、数字1つだけが入っている前提。戻り値: { digit, holes } または null */
+function omrDigitShape(ink, x0, y0, x1, y1) {
+  let a = x1, b = x0, c = y1, d = y0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (ink(x, y)) { if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > d) d = y; }
+  if (b < a || d < c) return null;
+  const bw = b - a + 1, bh = d - c + 1; if (bh < 6 || bw < 2) return null;
+  const GW = 20, GH = 30, G = new Uint8Array(GW * GH);
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+    const xa = a + Math.floor(i * bw / GW), xb = a + Math.max(Math.floor(i * bw / GW), Math.ceil((i + 1) * bw / GW) - 1), ya = c + Math.floor(j * bh / GH), yb = c + Math.max(Math.floor(j * bh / GH), Math.ceil((j + 1) * bh / GH) - 1);
+    let n = 0, t = 0; for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) { t++; if (ink(x, y)) n++; }
+    G[j * GW + i] = n / t >= 0.4 ? 1 : 0;
+  }
+  // 穴: 外側につながっていない白
+  const seen = new Uint8Array(GW * GH), stack = [];
+  const push = (i, j) => { if (i < 0 || j < 0 || i >= GW || j >= GH || seen[j * GW + i] || G[j * GW + i]) return; seen[j * GW + i] = 1; stack.push([i, j]); };
+  for (let i = 0; i < GW; i++) { push(i, 0); push(i, GH - 1); } for (let j = 0; j < GH; j++) { push(0, j); push(GW - 1, j); }
+  while (stack.length) { const [i, j] = stack.pop(); push(i + 1, j); push(i - 1, j); push(i, j + 1); push(i, j - 1); }
+  const holes = []; for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+    if (G[j * GW + i] || seen[j * GW + i]) continue; let n = 0, sy = 0; const st = [[i, j]]; seen[j * GW + i] = 1;
+    while (st.length) { const [p, q] = st.pop(); n++; sy += q; [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { const x = p + dx, y = q + dy; if (x >= 0 && y >= 0 && x < GW && y < GH && !G[y * GW + x] && !seen[y * GW + x]) { seen[y * GW + x] = 1; st.push([x, y]); } }); }
+    if (n >= 0.04 * GW * GH) holes.push({ n, cy: sy / n / GH });
+  }
+  const colFrac = i => { let n = 0; for (let j = 0; j < GH; j++) n += G[j * GW + i]; return n / GH; }, rowFrac = j => { let n = 0; for (let i = 0; i < GW; i++) n += G[j * GW + i]; return n / GW; };
+  let maxCol = 0; for (let i = 0; i < GW; i++) maxCol = Math.max(maxCol, colFrac(i));
+  let top = 0, base = 0; for (let j = 0; j <= 3; j++) top = Math.max(top, rowFrac(j)); for (let j = GH - 4; j < GH; j++) base = Math.max(base, rowFrac(j));
+  const region = (i0, i1, j0, j1) => { let n = 0, t = 0; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { t++; n += G[j * GW + i]; } return n / t; };
+  const leftMid = region(0, 5, 6, 13), aspect = bw / bh;
+  let digit;
+  if (holes.length >= 2) digit = "8";
+  else if (holes.length === 1) { let am = 0, mv = 0; for (let i = 0; i < GW; i++) { const v = colFrac(i); if (v > mv) { mv = v; am = i; } }
+    const hn = holes[0].n / (GW * GH); digit = (top >= 0.85 && holes[0].cy > 0.6 && hn < 0.1) ? "5" : (hn < 0.15 && mv >= 0.95 && am >= 0.5 * GW && holes[0].cy > 0.4 && holes[0].cy < 0.6) ? "4" : holes[0].cy < 0.4 ? "9" : holes[0].cy > 0.6 ? "6" : "0"; }
+  else if (aspect < 0.5 || (maxCol >= 0.9 && aspect < 0.7)) digit = "1";
+  else if (base >= 0.85 && top < 0.9 && leftMid < 0.45) digit = "2";
+  else if (top >= 0.7 && base < 0.5) digit = leftMid >= 0.45 ? "5" : "7";
+  else digit = leftMid >= 0.45 ? "5" : "3";
+  return { digit, holes: holes.length, maxCol, top, base, leftMid, aspect };
+}
+
+/* 範囲 [x0..x1]×[y0..y1] にある数字を左から読む。戻り値: { text, score } または null */
+function omrReadDigits(ink, x0, y0, x1, y1, minGap) {
+  const cols = []; for (let x = x0; x <= x1; x++) { let n = 0; for (let y = y0; y <= y1; y++) if (ink(x, y)) n++; cols.push(n > 0); }
+  const segs = []; for (let i = 0; i < cols.length;) { if (!cols[i]) { i++; continue; } let j = i; while (j + 1 < cols.length) { if (cols[j + 1]) { j++; continue; } let k = j + 1; while (k < cols.length && !cols[k]) k++; if (k - j - 1 >= minGap || k >= cols.length) break; j = k; } segs.push([x0 + i, x0 + j]); i = j + 1; }
+  if (!segs.length || segs.length > 3) return null;
+  let text = "", sc = 9;
+  for (const [a, b] of segs) {
+    const r0 = omrDigitShape(ink, a, y0, b, y1); if (!r0) return null;
+    const r = { text: r0.digit, score: 1 };
+    text += r.text; sc = Math.min(sc, r.score);
+  }
+  return { text, score: sc };
+}
+
 function omrAnalyzeStaff(bin, w, h, st) {
   const S = st.S, y0 = st.lines[0], y4 = st.lines[4], log = [];
   // (1) 小節線: 五線の上端〜下端を全部埋める縦線
@@ -166,6 +256,48 @@ function omrAnalyzeStaff(bin, w, h, st) {
     for (let k = 1; k < clusters.length; k++) { const c = clusters[k]; if (c.a - (zoneEnd - rx0) <= 2.5 * S && !c.out && c.b - c.a <= 2.2 * S) zoneEnd = rx0 + c.b; else break; }
   }
 
+  // (4c) 途中の拍子記号: 小節線のすぐ右にある「五線の上半分と下半分の両方に数字がある」かたまり
+  const y2 = st.lines[2], inkB = (x, y) => (x >= rx0 && x <= rx1 && y >= ry0 && y <= ry1) ? B[(y - ry0) * rw + (x - rx0)] === 1 : false;
+  const tsLike = (a, b) => {
+    let up = 0, lo = 0;
+    for (let y = Math.round(y0 - 0.2 * S); y <= Math.round(y4 + 0.2 * S); y++) { let ink = 0; for (let x = a; x <= b; x++) if (inkB(rx0 + x, y)) { ink = 1; break; } if (ink) { if (y <= y2) up++; else lo++; } }
+    return up >= 1.3 * S && lo >= 1.3 * S;
+  };
+  const zonesAt = {}, tsRead = {};
+  const readTs = (xa, xb) => {                                  // 範囲内の拍子記号(上の数字/下の数字)を読む
+    const clean = (x, y) => { for (const [a, b] of st.band) if (y >= a && y <= b) return bin[(a - 1) * w + x] === 1 || bin[(b + 1) * w + x] === 1; return bin[y * w + x] === 1; };   // 五線の線は、上か下が黒い所だけ数字の一部とみなす
+    const topI = (x, y) => y <= y2 && y >= y0 - 0.1 * S && clean(x, y), botI = (x, y) => y >= y2 + 1 && y <= y4 + 0.5 * S && clean(x, y), gap = Math.max(1, Math.round(0.12 * S));
+    const t = omrReadDigits(topI, xa, Math.round(y0 - 0.1 * S), xb, Math.round(y2), gap), b = omrReadDigits(botI, xa, Math.round(y2 + 1), xb, Math.round(y4 + 0.5 * S), gap);
+    if (!t || !b) return null; const key = t.text + "/" + b.text; return TIME_SIGS[key] ? key : null;
+  };
+  for (let m = 1; m < barX.length - 1; m++) {
+    const xs = barX[m] - rx0 + 1, k = clusters.findIndex(c => c.a >= xs - 2 && c.a - xs <= 3 * S);
+    if (k < 0) continue; const c0 = clusters[k];
+    if (c0.out || c0.b - c0.a > 3.8 * S || !tsLike(c0.a, c0.b)) continue;
+    let end = c0.b;
+    for (let j = k + 1; j < clusters.length; j++) { const c = clusters[j]; if (c.a - end <= 1.2 * S && !c.out && c.b - c.a <= 2.2 * S && tsLike(c.a, c.b)) end = c.b; else break; }
+    zonesAt[m] = rx0 + end; tsRead[m] = readTs(c0.a + rx0, rx0 + end);
+  }
+  if (zoneEnd > rx0) {                                          // 1小節目: 音部記号のあとに続く拍子記号
+    const tc = clusters.filter(c => rx0 + c.b <= zoneEnd + 1 && tsLike(c.a, c.b));
+    if (tc.length) tsRead[0] = readTs(rx0 + tc[0].a, rx0 + tc[tc.length - 1].b);
+  }
+  const inZone = x => { if (x <= zoneEnd + 0.3 * S) return true; for (const m in zonesAt) if (x >= barX[m] && x <= zonesAt[m] + 0.3 * S) return true; return false; };
+
+  // (4d) N小節休符: 中央の線をまたぐ太い横棒。数字は五線のすぐ上
+  const mrests = {};
+  const thickAt = (x) => { const a = Math.round(y2 - 0.2 * S), b = Math.round(y2 + 0.2 * S); return bin[a * w + x] && bin[b * w + x]; };
+  for (let m = 0; m + 1 < barX.length; m++) {
+    const a0 = Math.round((m === 0 ? Math.max(barX[0], zoneEnd) : (zonesAt[m] || barX[m])) + 0.4 * S), b0 = Math.round(barX[m + 1] - 0.4 * S);
+    let best = 0, bs = 0, run = 0, rs = 0;
+    for (let x = a0; x <= b0; x++) { if (thickAt(x)) { if (!run) rs = x; run++; if (run > best) { best = run; bs = rs; } } else run = 0; }
+    if (best >= 4 * S && best >= 0.4 * (b0 - a0)) {
+      const cxm = bs + best / 2, inkA = (x, y) => x >= 0 && x < w && y >= 0 && y < h && bin[y * w + x] === 1;
+      const num = omrReadDigits(inkA, Math.round(cxm - 1.3 * S), Math.round(y0 - 2.45 * S), Math.round(cxm + 1.3 * S), Math.round(y0 - 0.3 * S), Math.max(1, Math.round(0.12 * S)));
+      mrests[m] = { xa: bs, xb: bs + best, count: num && +num.text >= 2 && +num.text <= 99 ? +num.text : (num && +num.text === 1 ? 1 : 0) };
+    }
+  }
+
   // (5) 縦・横にのびる黒の長さを求める
   const vr = new Uint16Array(rw * rh), hr = new Uint16Array(rw * rh);
   for (let x = 0; x < rw; x++) { let y = 0; while (y < rh) { if (!B[y * rw + x]) { y++; continue; } let e = y; while (e + 1 < rh && B[(e + 1) * rw + x]) e++; for (let k = y; k <= e; k++) vr[k * rw + x] = e - y + 1; y = e + 1; } }
@@ -219,7 +351,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (c.area < 0.12 * S * S) continue;                                                   // ごみ・付点
     const hole = hasHole(c);
     if (hole && bw <= 0.85 && bh <= 0.85 && bw >= 0.3) { rings.push({ cx, cy }); continue; }   // ハイハットのオープン記号 ○
-    if (rx0 + c.maxx <= zoneEnd + 0.3 * S) continue;                                        // 音部記号・拍子記号
+    if (inZone(rx0 + c.maxx)) continue;                                        // 音部記号・拍子記号
     if (hole && bw >= 0.65 && bw <= 1.8 && bh >= 0.55 && bh <= 1.3 && hasStem(c)) heads.push({ x: cx, y: cy, kind: "oval" });     // 白い符頭(2分音符など)
   }
   // ×印の符頭(ハイハット・シンバル): 2本の斜めの線が交わる形を探す。×が隣とくっついていても見つけられる
@@ -231,7 +363,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       Dl[y * rw + x] = v;
     }
     for (let y = cy0; y <= cy1; y++) for (let x = rc + 1; x < rw - rc - 1; x++) {
-      if (rx0 + x <= zoneEnd + 0.3 * S) continue;
+      if (inZone(rx0 + x)) continue;
       let hit = 0; for (let k = -rc; k <= rc; k++) hit += Dl[(y + k) * rw + x + k] + Dl[(y - k) * rw + x + k];
       const fr = hit / (2 * (2 * rc + 1)); if (fr < 0.8) continue;
       const gap = C[(y - rg) * rw + x] + C[(y + rg) * rw + x] + C[y * rw + x - rg] + C[y * rw + x + rg];
@@ -269,7 +401,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
   for (let y = by0 + er; y <= by1 - er; y++) for (let x = 0; x < rw; x++) { let ok = 1; for (let d = -er; d <= er; d++) if (!Hh[(y + d) * rw + x]) { ok = 0; break; } E[y * rw + x] = ok; }
   const seen = new Uint8Array(rw * rh);
   for (let y = by0; y <= by1; y++) for (let x = 0; x < rw; x++) {
-    if (!E[y * rw + x] || seen[y * rw + x] || rx0 + x <= zoneEnd + 0.3 * S) continue;
+    if (!E[y * rw + x] || seen[y * rw + x] || inZone(rx0 + x)) continue;
     let sx = 0, sy = 0, n = 0, minx = x, maxx = x, miny = y, maxy = y; stack.length = 0; stack.push(y * rw + x); seen[y * rw + x] = 1;
     while (stack.length) {
       const q = stack.pop(), qy = (q / rw) | 0, qx = q - qy * rw; sx += qx; sy += qy; n++;
@@ -293,7 +425,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (hd.kind === "oval" && hd.h > 6) hd.inst = "kick";
     if (hd.kind === "cross" && hd.inst === "hh_close" && (hd.ring || rings.some(r => Math.abs(r.cx - hd.x) < 0.9 * S && r.cy < hd.y && hd.y - r.cy < 2 * S))) hd.inst = "hh_open";
   });
-  return { st, barX, heads, zoneEnd, S };
+  return { st, barX, heads, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
@@ -348,30 +480,91 @@ function omrRecognize(g0, w, h, opt) {
   const offs = [];
   systems.forEach(sy => { for (let m = 1; m + 1 < sy.barX.length + 1 && m < sy.barX.length; m++) { const a = sy.heads.filter(hd => hd.x > sy.barX[m - 1] + 0.5 * S && hd.x < sy.barX[m]); if (a.length) { const first = Math.min(...a.map(q => q.x)); const d = first - sy.barX[m - 1]; if (d <= 3.4 * S) offs.push(d); } } });
   offs.sort((a, b) => a - b); const padL = offs.length ? offs[offs.length >> 1] : 1.8 * S;
-  const measures = [];
+  const measures = []; let tsCur = opt.ts && TIME_SIGS[opt.ts] ? opt.ts : "4/4", tsFound = null, bpm = null;
   systems.forEach((sy, si) => {
-    const clefEnd = Math.max(sy.barX[0], sy.zoneEnd);
+    const clefEnd = Math.max(sy.barX[0], sy.zoneEnd), boxes = omrFindBoxes(bin, w, h, sy.st);
+    if (si === 0) bpm = omrFindTempo(bin, w, sy.st, boxes);
+    const markOf = {};                                           // 小節番号(段の中) → リハーサル記号
+    boxes.forEach(bx => {
+      const text = omrReadMark(bin, w, bx); if (!text) return; const cx = (bx.xa + bx.xb) / 2; let mi = -1, bd = 3 * S;
+      sy.barX.forEach((x, i) => { if (i + 1 < sy.barX.length && Math.abs(x - cx) <= bd) { bd = Math.abs(x - cx); mi = i; } });
+      if (mi < 0) sy.barX.forEach((x, i) => { if (i + 1 < sy.barX.length && bx.xa - x >= -0.5 * S && bx.xa - x <= 2.5 * S) mi = i; });
+      if (mi >= 0) markOf[mi] = text;
+    });
     for (let m = 0; m + 1 < sy.barX.length; m++) {
       const xl = sy.barX[m], xr = sy.barX[m + 1]; if (xr - xl < 2.5 * S) continue;
-      const c = m === 0 ? clefEnd : xl, W = xr - c;
-      const hs = sy.heads.filter(q => q.x > (m === 0 ? c : xl) && q.x < xr).sort((a, b) => a.x - b.x);
+      if (sy.tsRead[m]) { tsCur = sy.tsRead[m]; if (!tsFound) tsFound = tsCur; }
+      const T = tsInfo(tsCur).ticks, zoneEndM = m === 0 ? clefEnd : (sy.zonesAt[m] || 0);
+      const c = Math.max(m === 0 ? clefEnd : xl, zoneEndM), W = xr - c, mr = sy.mrests[m];
+      const hs = mr ? [] : sy.heads.filter(q => q.x > c && q.x < xr).sort((a, b) => a.x - b.x);
       const onsets = [];                                           // 近い x を同じ拍(和音)にまとめる
       hs.forEach(q => { const l = onsets[onsets.length - 1]; if (l && q.x - l.x <= 0.6 * S) { l.heads.push(q); l.x = (l.x * (l.heads.length - 1) + q.x) / l.heads.length; } else onsets.push({ x: q.x, heads: [q] }); });
-      const qs = omrQuantize(onsets.map(o => o.x), c, W, T, S, padL, m === 0);
+      const qs = omrQuantize(onsets.map(o => o.x), c, W, T, S, padL, m === 0 || !!zoneEndM);
       const slots = [];
       onsets.forEach((o, i) => { const q = qs[i], l = slots[slots.length - 1]; if (l && l.t === q.t) l.heads.push(...o.heads); else slots.push({ t: q.t, tup: q.tup, heads: o.heads.slice() }); });
       slots.forEach(sl => { const seen = new Set(); sl.heads = sl.heads.filter(h => !seen.has(h.inst) && seen.add(h.inst)); });
-      measures.push({ sys: si, idx: measures.length, x0: xl, x1: xr, c, slots, top: sy.st.lines[0], bottom: sy.st.lines[4] });
+      measures.push({ sys: si, idx: measures.length, x0: xl, x1: xr, c, slots, ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
     }
   });
-  return { ok: true, skew, gray: g, w, h, S, systems, measures, padL };
+  return { ok: true, skew, gray: g, w, h, S, systems, measures, padL, bpm, tsFound };
+}
+
+/* ---- リハーサル記号(四角で囲んだ文字)と、テンポ(♩=数字) ---- */
+function omrFindBoxes(bin, w, h, st) {
+  const S = st.S, y0 = st.lines[0], out = [], runsAt = {};
+  const ya = Math.max(0, Math.round(y0 - 5.8 * S)), yb = Math.max(0, Math.round(y0 - 0.8 * S));
+  for (let y = ya; y <= yb; y++) {
+    const rr = []; let x = Math.max(0, st.left);
+    while (x <= st.right) { if (bin[y * w + x]) { let j = x; while (j + 1 <= st.right && bin[y * w + j + 1]) j++; const L = j - x + 1; if (L >= 1.0 * S && L <= 14 * S) rr.push([x, j]); x = j + 1; } else x++; }
+    if (rr.length) runsAt[y] = rr;
+  }
+  Object.keys(runsAt).map(Number).sort((a, b) => a - b).forEach(y => {
+    runsAt[y].forEach(([xa, xb]) => {
+      if (out.some(o => Math.abs((o.xa + o.xb) / 2 - (xa + xb) / 2) < 0.6 * S && Math.abs(o.ya - y) < 3 * S && Math.abs(o.xb - o.xa - (xb - xa)) < 0.6 * S)) return;
+      for (let d = Math.round(1.2 * S); d <= Math.round(3.9 * S); d++) {
+        const rr = runsAt[y + d]; if (!rr) continue; if (!rr.find(([a, b]) => Math.abs(a - xa) <= 2 && Math.abs(b - xb) <= 2)) continue;
+        let okL = 0, okR = 0; for (let yy = y; yy <= y + d; yy++) { if (bin[yy * w + xa] || bin[yy * w + xa + 1]) okL++; if (bin[yy * w + xb] || bin[yy * w + xb - 1]) okR++; }
+        if (okL >= 0.85 * (d + 1) && okR >= 0.85 * (d + 1)) { out.push({ xa, xb, ya: y, yb: y + d }); return; }
+      }
+    });
+  });
+  return out;
+}
+function omrReadMark(bin, w, bx) {
+  const m = Math.max(3, Math.round((bx.yb - bx.ya) * 0.12)), ink = (x, y) => bin[y * w + x] === 1;
+  const v = omrVecOf(ink, bx.xa + m, bx.ya + m, bx.xb - m, bx.yb - m, 24, 16); if (!v) return "";
+  const cands = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").concat(OMR_WORDS), r = omrMatch(v, cands, 24, 16);
+  return r.text && r.score >= 0.55 ? r.text : "";
+}
+function omrFindTempo(bin, w, st, boxes) {
+  const S = st.S, y0 = st.lines[0], xa = Math.max(0, st.left), xb = Math.round(st.left + 0.55 * (st.right - st.left)), ya = Math.max(0, Math.round(y0 - 6.4 * S)), yb = Math.round(y0 - 2.6 * S);
+  const inBox = (x, y) => boxes.some(b => x >= b.xa - 2 && x <= b.xb + 2 && y >= b.ya - 2 && y <= b.yb + 2);
+  const rw = xb - xa + 1, rh = yb - ya + 1; if (rw < 10 || rh < 10) return null;
+  const lab = new Int32Array(rw * rh), comps = []; const on = (x, y) => bin[(ya + y) * w + xa + x] && !inBox(xa + x, ya + y);
+  for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+    if (!on(x, y) || lab[y * rw + x]) continue; const id = comps.length + 1, st2 = [[x, y]]; lab[y * rw + x] = id; let a = x, b = x, c = y, d = y;
+    while (st2.length) { const [px, py] = st2.pop(); if (px < a) a = px; if (px > b) b = px; if (py < c) c = py; if (py > d) d = py; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = px + dx, ny = py + dy; if (nx < 0 || ny < 0 || nx >= rw || ny >= rh || lab[ny * rw + nx] || !on(nx, ny)) continue; lab[ny * rw + nx] = id; st2.push([nx, ny]); } }
+    comps.push({ a: xa + a, b: xa + b, c: ya + c, d: ya + d, id });
+  }
+  const dig = comps.filter(c => { const bh = c.d - c.c + 1, bw = c.b - c.a + 1; return bh >= 0.9 * S && bh <= 2.3 * S && bw <= 1.7 * S; }).sort((p, q) => p.a - q.a);
+  const ink = (x, y) => bin[y * w + x] === 1 && !inBox(x, y);
+  const groups = []; dig.forEach(c => { const g = groups[groups.length - 1]; if (g && c.a - g[g.length - 1].b <= 0.7 * S && Math.abs(c.c - g[0].c) < 0.7 * S) g.push(c); else groups.push([c]); });
+  for (const g of groups) {
+    if (g.length < 2 || g.length > 3) continue;
+    const eq = comps.filter(c => c.b < g[0].a && g[0].a - c.b <= 1.8 * S && (c.b - c.a + 1) >= 0.5 * S && (c.d - c.c + 1) <= 0.7 * S);
+    if (!eq.length) continue;
+    let text = "", ok = true; for (const c of g) { const r = omrReadDigits(ink, c.a, c.c, c.b, c.d, 1); if (!r || r.text.length !== 1 || r.score < 0.6) { ok = false; break; } text += r.text; }
+    if (ok && +text >= 30 && +text <= 300) return +text;
+  }
+  return null;
 }
 
 /* 読み取り結果 → アプリの小節データ(配列)。長さ = 次の音符までの間隔(最大4分音符) */
 function omrToMeasures(res, tsKey) {
-  const ts = tsInfo(tsKey || "4/4"), out = [];
+  const out = [];
   res.measures.forEach(rm => {
-    const m = newMeasure(tsKey || "4/4");
+    const tk = rm.ts || tsKey || "4/4", ts = tsInfo(tk), n = rm.mrN >= 2 ? rm.mrN : 1;
+    const m = newMeasure(tk); m.mark = rm.mark || "";
     ["up", "down"].forEach(voice => {
       const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
       list.forEach((s, i) => {
@@ -382,6 +575,7 @@ function omrToMeasures(res, tsKey) {
       });
     });
     out.push(m);
+    if (n >= 2) { m.mr = true; for (let k = 1; k < n; k++) out.push(newMeasure(tk)); }              // N小節休符 → 空の小節をN個(まとめて表示)
   });
   return out;
 }
