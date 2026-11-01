@@ -32,3 +32,7 @@ node test/e2e.js index.html
 ## ライセンス
 
 コードは MIT。録音した音源を使う場合は、再配布してよいライセンスのものだけを使ってください(`samples/README.md`)。
+
+## ホーム画面に追加(iPad / iPhone)
+
+公開ページを Safari で開き、共有ボタン →「ホーム画面に追加」で、アイコン付きのアプリのように起動できます(アイコンは `icons/`、設定は `manifest.webmanifest`)。
