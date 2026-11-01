@@ -85,7 +85,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.4.1</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.4.2</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -111,6 +111,7 @@ body.has-dock .toast{bottom:200px}
       </div>
       <div class="group">
         <button id="modeInput">✏ 入力</button><button id="modeSelect" title="タップした位置にカーソルだけ置く(Shift+タップで範囲選択)">📍 位置選択</button><button id="modeErase" class="danger">🗑 消去</button>
+        <button id="newBtn" class="small">📄 新規</button>
         <button id="clearBtn" class="small">全消去</button>
       </div>
     </div>
@@ -2224,6 +2225,12 @@ function clearAllNotes() {
   if (!confirm("すべての音符と記号を消去します(小節数と拍子は残ります)。よろしいですか？")) return;
   state.score.measures.forEach(clearMeasureContent); commit();
 }
+function newBlankScore() {
+  if (!confirm("新しい白紙の楽譜を始めます。いまの楽譜は「↩ 戻す」で戻せます(先に保存しておくと安心です)。よろしいですか？")) return;
+  Player.stop(); hidePlayhead();
+  const n = newScore(); state.score.title = n.title; state.score.bpm = n.bpm; state.score.measures = n.measures;
+  state.cursor = { m: 0, t: 0 }; state.anchor = null; commit(); showStatus("新しい楽譜を開きました");
+}
 let editingMeasure = -1;
 function openMeasureModal(i) {
   editingMeasure = i; const m = state.score.measures[i];
@@ -2291,6 +2298,7 @@ function buildDock() {
     mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
+    mk("dk-btn", "📄 新規", newBlankScore),
     mk("dk-btn", "休符で進む", () => { needCursor(); const r = stepCursor(state.score, state.cursor, stepNow(), 1); if (!r.overflow) setCursor(r, state.extend); }));
   d.append(pads, nav, dur);
   document.body.classList.add("has-dock");
@@ -2889,7 +2897,7 @@ function runSelfTest() {
   t("段組みが用紙幅に収まる", () => { const L = layoutScore(state.score); return L.measures.every(m => m.x0 + m.w <= LAYOUT.PAGE_W - LAYOUT.MARGIN + 1) || "はみ出し"; });
   t("位置→tick の変換が往復で一致する", () => {
     const L = layoutScore(state.score);
-    for (const it of L.measures) for (const k of [0, 12, 24, 48, 96]) { if (k >= it.ticks) continue; const x = it.xStart + LAYOUT.HEAD_OFF + k * it.ppt; if (Math.round((x - it.xStart - LAYOUT.HEAD_OFF) / it.ppt) !== k) return "ずれ"; }
+    for (const it of L.measures) for (const k of [0, 12, 24, 48, 96]) { if (it.hidden || !it.ppt || k >= it.ticks) continue; const x = it.xStart + LAYOUT.HEAD_OFF + k * it.ppt; if (Math.round((x - it.xStart - LAYOUT.HEAD_OFF) / it.ppt) !== k) return "ずれ"; }
     return true;
   });
   t("強弱記号と繰り返しを含む楽譜が保存→読込で同じになる", () => {
@@ -2923,7 +2931,7 @@ function bindEvents() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("scoreHost", "click", onScoreClick);
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
-  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes);
+  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore);
   on("bpmRange", "input", e => changeBpm(e.target.value));
   on("titleInput", "change", e => { state.score.title = e.target.value.trim().slice(0, 80) || "マイ・ドラム・スコア"; commit(); });
   document.querySelectorAll("[data-base]").forEach(b => b.addEventListener("click", () => setBase(+b.dataset.base)));

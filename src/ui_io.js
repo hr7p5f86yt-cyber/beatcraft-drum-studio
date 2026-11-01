@@ -130,7 +130,7 @@ function runSelfTest() {
   t("段組みが用紙幅に収まる", () => { const L = layoutScore(state.score); return L.measures.every(m => m.x0 + m.w <= LAYOUT.PAGE_W - LAYOUT.MARGIN + 1) || "はみ出し"; });
   t("位置→tick の変換が往復で一致する", () => {
     const L = layoutScore(state.score);
-    for (const it of L.measures) for (const k of [0, 12, 24, 48, 96]) { if (k >= it.ticks) continue; const x = it.xStart + LAYOUT.HEAD_OFF + k * it.ppt; if (Math.round((x - it.xStart - LAYOUT.HEAD_OFF) / it.ppt) !== k) return "ずれ"; }
+    for (const it of L.measures) for (const k of [0, 12, 24, 48, 96]) { if (it.hidden || !it.ppt || k >= it.ticks) continue; const x = it.xStart + LAYOUT.HEAD_OFF + k * it.ppt; if (Math.round((x - it.xStart - LAYOUT.HEAD_OFF) / it.ppt) !== k) return "ずれ"; }
     return true;
   });
   t("強弱記号と繰り返しを含む楽譜が保存→読込で同じになる", () => {
@@ -164,7 +164,7 @@ function bindEvents() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("scoreHost", "click", onScoreClick);
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
-  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes);
+  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore);
   on("bpmRange", "input", e => changeBpm(e.target.value));
   on("titleInput", "change", e => { state.score.title = e.target.value.trim().slice(0, 80) || "マイ・ドラム・スコア"; commit(); });
   document.querySelectorAll("[data-base]").forEach(b => b.addEventListener("click", () => setBase(+b.dataset.base)));

@@ -165,6 +165,12 @@ function clearAllNotes() {
   if (!confirm("すべての音符と記号を消去します(小節数と拍子は残ります)。よろしいですか？")) return;
   state.score.measures.forEach(clearMeasureContent); commit();
 }
+function newBlankScore() {
+  if (!confirm("新しい白紙の楽譜を始めます。いまの楽譜は「↩ 戻す」で戻せます(先に保存しておくと安心です)。よろしいですか？")) return;
+  Player.stop(); hidePlayhead();
+  const n = newScore(); state.score.title = n.title; state.score.bpm = n.bpm; state.score.measures = n.measures;
+  state.cursor = { m: 0, t: 0 }; state.anchor = null; commit(); showStatus("新しい楽譜を開きました");
+}
 let editingMeasure = -1;
 function openMeasureModal(i) {
   editingMeasure = i; const m = state.score.measures[i];
