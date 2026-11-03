@@ -88,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.4</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.8.0</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -310,7 +310,8 @@ const INSTRUMENTS = {
   hi_tom:   { name: "Hi-Tom",   h: 1,  head: "oval",   voice: "up",   color: "#ec4899" },
   snare:    { name: "Snare",    h: 3,  head: "oval",   voice: "up",   color: "#10b981" },
   low_tom:  { name: "Low-Tom",  h: 5,  head: "oval",   voice: "up",   color: "#f97316" },
-  kick:     { name: "Kick",     h: 7,  head: "oval",   voice: "down", color: "#ef4444" }
+  kick:     { name: "Kick",     h: 7,  head: "oval",   voice: "down", color: "#ef4444" },
+  hh_pedal: { name: "HH Pedal", h: 9,  head: "cross",  voice: "down", color: "#64748b" }
 };
 
 /* 音価の表: key = "d" または "d:t"(3連符)。nv=記譜上の音価, dots=付点数, flags=旗の本数 */
@@ -658,6 +659,8 @@ function expressionFor(inst, t, info, n) {
     dv = (isMeasureHead ? 8 : q ? 3 : off8 ? -6 : -10) * k;
   } else if (inst === "snare") {
     dv = n && n.gh ? 0 : back ? 5 : -2; dt = n && n.gh ? 0 : back ? 5 : 1;
+  } else if (inst === "hh_pedal") {
+    dv = isMeasureHead ? 2 : q ? 0 : -4; dt = -3;
   } else if (inst === "kick") {
     dv = isMeasureHead ? 6 : q ? 1 : -4; dt = -3;
   } else if (inst === "crash") { dv = 6; dt = -2; }
@@ -869,8 +872,8 @@ function synthDrum(key, layer, variant, sr) {
     const wa = 0.7 * (0.55 + 0.9 * v); for (let i = 0; i < n; i++) out[i] += wire2[i] * wa * 2.2;
     const stick = biquad(noiseArr(n, rnd), "hp", 3800, 0.7, sr);
     addDecayNoise(out, stick, 0.25 + 0.4 * v, 0.0016 * sr);
-  } else if (key === "hh_close" || key === "hh_open") {
-    const open = key === "hh_open", n = Math.round((open ? 1.4 : 0.22) * sr); out = new Float32Array(n);
+  } else if (key === "hh_close" || key === "hh_open" || key === "hh_pedal") {
+    const open = key === "hh_open", n = Math.round((open ? 1.4 : key === "hh_pedal" ? 0.12 : 0.22) * sr); out = new Float32Array(n);
     const base = [2900, 3300, 3800, 4100, 4700, 5200, 5800, 6300, 6900, 7400, 8000, 8700, 9300, 9800, 10500, 11200, 12000, 12600, 13400, 14300];
     base.forEach((f, k) => {                              // 金属の円盤の細かい倍音。ほぼ同じ高さの2つの音を重ねて「うなり」(ジャラジャラ感)を作る
       const tau = (open ? 0.55 : 0.036) * (1.3 - k * 0.04) * jit(0.15), fr = f * jit(0.035), amp = (0.4 + 0.6 * rnd()) * (0.5 + 0.7 * v * (k / 10)) * 0.55;
@@ -882,6 +885,7 @@ function synthDrum(key, layer, variant, sr) {
     addDecayNoise(out, nz, 0.9 * (0.5 + 0.8 * v), (open ? 0.3 : 0.022) * sr);
     if (open) addDecayNoise(out, nz, 0.25, 0.7 * sr);
     biquad(out, "hp", 3000, 0.7, sr);
+    if (key === "hh_pedal") for (let i = 0; i < n; i++) out[i] *= 0.5;                  // 足で踏む「チッ」: 閉じたハイハットより小さく短く
   } else if (key === "hi_tom" || key === "low_tom") {
     const hi = key === "hi_tom", n = Math.round((hi ? 0.7 : 0.95) * sr); out = new Float32Array(n);
     const fe = (hi ? 205 : 112) * jit(0.03), tauA = (hi ? 0.2 : 0.3), drop = 0.32 + 0.2 * v;
@@ -1612,12 +1616,14 @@ function omrAnalyzeStaff(bin, w, h, st) {
   // ×印の符頭(ハイハット・シンバル): 2本の斜めの線が交わる形を探す。×が隣とくっついていても見つけられる
   {
     const rc = Math.max(2, Math.round(0.46 * S)), rg = Math.max(2, Math.round(0.3 * S));
-    const cy0 = Math.max(rc, Math.round(y0 - 1.5 * S) - ry0), cy1 = Math.round(y0 + 0.5 * S) - ry0, Dl = new Uint8Array(rw * rh), cand = [];
+    const cy0 = Math.max(rc, Math.round(y0 - 1.5 * S) - ry0), cy1 = Math.round(y4 + 0.9 * S) - ry0, Dl = new Uint8Array(rw * rh), cand = [];
     for (let y = Math.max(1, cy0 - rc); y <= Math.min(rh - 2, cy1 + rc); y++) for (let x = 1; x < rw - 1; x++) {
       let v = 0; for (let dy = -1; dy <= 1 && !v; dy++) for (let dx = -1; dx <= 1; dx++) if (C[(y + dy) * rw + x + dx]) { v = 1; break; }
       Dl[y * rw + x] = v;
     }
+    const yUpMax = Math.round(y0 + 0.5 * S) - ry0, yPedMin = Math.round(y4 + 0.25 * S) - ry0;   // 上声部の×は五線の上〜上端、ペダルハイハットの×は五線のすぐ下
     for (let y = cy0; y <= cy1; y++) for (let x = rc + 1; x < rw - rc - 1; x++) {
+      if (y > yUpMax && y < yPedMin) continue;
       if (inZone(rx0 + x)) continue;
       let hit = 0; for (let k = -rc; k <= rc; k++) hit += Dl[(y + k) * rw + x + k] + Dl[(y - k) * rw + x + k];
       const fr = hit / (2 * (2 * rc + 1)); if (fr < 0.8) continue;
@@ -1639,11 +1645,12 @@ function omrAnalyzeStaff(bin, w, h, st) {
       }
       return best;
     };
-    acc.forEach(c => { c.ring = c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && ringOf(c); if (c.ring) rcache.push(c.ring); });
+    acc.forEach(c => { c.ped = c.y >= yPedMin; c.ring = !c.ped && c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && ringOf(c); if (c.ring) rcache.push(c.ring); });
     const accF = acc.filter(c => c.ring || !rcache.some(r => Math.abs(r.x - c.x) < 0.7 * S && Math.abs(r.y - c.y) < 0.7 * S));
     accF.forEach(c => {
       let stem = false;
-      { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
+      if (c.ped) { const yy = c.y + Math.round(0.9 * S); if (yy < rh) for (let xx = Math.max(0, Math.round(c.x - 0.9 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.2 * S)); xx++) if (vr[yy * rw + xx] >= 1.2 * S) stem = true; }   // ペダルの×は符幹が左下にのびる
+      else { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
       if (!stem) return;
       const hd = { x: rx0 + c.x, y: ry0 + c.y, kind: "cross" };
       if (c.ring) hd.ring = true;
@@ -1671,7 +1678,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (hh >= 0.3 && hh <= 8.6 && hasStem(c)) heads.push({ x: rx0 + sx / n, y: ry0 + sy / n, kind: "oval" });
   }
   // (7) パーツの決定: 形(×/丸)と五線上の高さ(半スペース単位 h)から
-  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
+  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0], ["hh_pedal", 9]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
   heads.forEach(hd => {
     hd.h = (hd.y - y0) / (S / 2);
     const tab = hd.kind === "cross" ? CROSS : OVAL; let best = tab[0];
@@ -1852,7 +1859,7 @@ function guessInstrument(name) {
   if (/crash|cr[ _-]?\d|splash|china/.test(n)) return "crash";
   if (/ride|bell/.test(n)) return "ride";
   if (/(open|opn|ohh|o[_ -]?hat).*(hat|hh)|(hat|hh).*(open|opn)|ohh/.test(n)) return "hh_open";
-  if (/hi[_ -]?hat|hihat|(^|[^a-z])hh([^a-z]|$)|hat/.test(n)) return /pedal|foot|chick/.test(n) ? null : "hh_close";
+  if (/hi[_ -]?hat|hihat|(^|[^a-z])hh([^a-z]|$)|hat/.test(n)) return /pedal|foot|chick/.test(n) ? "hh_pedal" : "hh_close";
   if (/snare|(^|[^a-z])sn([^a-z]|$)|rim/.test(n)) return "snare";
   if (/kick|bass[_ -]?drum|(^|[^a-z])bd([^a-z]|$)/.test(n)) return "kick";
   if (/floor|low|(^|[^a-z])lo[_ -]?tom|(^|[^a-z])ft|tom[_ -]?[3-9]/.test(n) && /tom|floor|ft/.test(n)) return "low_tom";
@@ -1946,8 +1953,8 @@ async function samplesRestore() {
  * 終了判定は rAF 側で1か所だけ行う(スケジューラ内から停止処理を呼ばない)。 */
 const AUDIO_SR = 44100;
 const AUDIO_OPT = { humanize: true, expr: true, room: 0.35 };           // room: 0〜1(部屋の響きの量)
-const PAN = { crash: -0.45, hh_close: -0.3, hh_open: -0.3, ride: 0.42, hi_tom: -0.18, snare: 0.02, low_tom: 0.3, kick: 0 };
-const SEND = { crash: 0.5, hh_close: 0.22, hh_open: 0.3, ride: 0.4, hi_tom: 0.55, snare: 0.6, low_tom: 0.55, kick: 0.25 };
+const PAN = { crash: -0.45, hh_close: -0.3, hh_open: -0.3, ride: 0.42, hi_tom: -0.18, snare: 0.02, low_tom: 0.3, kick: 0, hh_pedal: -0.3 };
+const SEND = { crash: 0.5, hh_close: 0.22, hh_open: 0.3, ride: 0.4, hi_tom: 0.55, snare: 0.6, low_tom: 0.55, kick: 0.25, hh_pedal: 0.1 };
 let audioCtx = null, masterGain = null, dryBus = null, wetBus = null, roomGain = null, openHat = null;
 const waveCache = {}, bufCache = {}, lastVariant = {};
 
@@ -2029,8 +2036,8 @@ function playSound(key, when, vel) {
   if (audioCtx.createStereoPanner) { const p = audioCtx.createStereoPanner(); p.pan.value = PAN[key] || 0; g.connect(p); out = p; }
   out.connect(dryBus);
   const send = audioCtx.createGain(); send.gain.value = (SEND[key] || 0.3) * (useSample ? 0.5 : 1); g.connect(send); send.connect(wetBus);
-  if (key === "hh_close" || key === "kick") {                                            // オープンハイハットをペダルで止める(閉じる)
-    if (key === "hh_close" && openHat) {
+  if (key === "hh_close" || key === "hh_pedal" || key === "kick") {                                            // オープンハイハットをペダルで止める(閉じる)
+    if ((key === "hh_close" || key === "hh_pedal") && openHat) {
       try { openHat.choke.gain.setTargetAtTime(0, t, 0.012); openHat.src.stop(t + 0.12); } catch (e) { console.error(e); }
       openHat = null;
     }
@@ -2326,7 +2333,7 @@ function closeModal(id) { $(id).classList.remove("show"); }
  * パッドは state.padPlace=false にすると「パーツを選ぶだけ」になる(旧操作・テスト用)。 */
 state.padPlace = true; state.extend = false; state.zoom = 1;
 const DOCK_DURS = [[192, "全"], [96, "2分"], [48, "4分"], [24, "8分"], [12, "16分"], [6, "32分"]];
-const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック" };
+const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック", hh_pedal: "ペダルHH" };
 
 function buildDock() {
   const d = $("dock"); if (!d) return;
@@ -2400,7 +2407,7 @@ function updateDock() {
  *            矢印キーで、いま選んでいる音符の長さに合わせた位置へ動く。
  * すべての編集は commit() を通るので、「戻す(Ctrl+Z)」でまとめて取り消せる。
  * (カーソルの移動そのものは、楽譜を変えないので履歴に入れない) */
-const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick" };
+const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick", p: "hh_pedal" };
 const BASE_KEYS = [192, 96, 48, 24, 12, 6];
 const INST_ORDER = Object.keys(INSTRUMENTS);
 
@@ -2667,7 +2674,7 @@ function openHelp() { $("helpModal").classList.add("show"); }
 const IMP = { results: [], res: null, ts: "4/4", file: null, pdf: null, page: 1, busy: false, lastCanvas: null };
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-const OMR_COLORS = { crash: "#f59e0b", hh_close: "#2563eb", hh_open: "#06b6d4", ride: "#8b5cf6", hi_tom: "#ec4899", snare: "#10b981", low_tom: "#f97316", kick: "#ef4444" };
+const OMR_COLORS = { crash: "#f59e0b", hh_close: "#2563eb", hh_open: "#06b6d4", ride: "#8b5cf6", hi_tom: "#ec4899", snare: "#10b981", low_tom: "#f97316", kick: "#ef4444", hh_pedal: "#64748b" };
 
 function openImport() { $("importModal").classList.add("show"); }
 function impStatus(msg, err) { const e = $("impStatus"); e.textContent = msg; e.className = err ? "err-text" : "help"; }

@@ -49,7 +49,8 @@ const INSTRUMENTS = {
   hi_tom:   { name: "Hi-Tom",   h: 1,  head: "oval",   voice: "up",   color: "#ec4899" },
   snare:    { name: "Snare",    h: 3,  head: "oval",   voice: "up",   color: "#10b981" },
   low_tom:  { name: "Low-Tom",  h: 5,  head: "oval",   voice: "up",   color: "#f97316" },
-  kick:     { name: "Kick",     h: 7,  head: "oval",   voice: "down", color: "#ef4444" }
+  kick:     { name: "Kick",     h: 7,  head: "oval",   voice: "down", color: "#ef4444" },
+  hh_pedal: { name: "HH Pedal", h: 9,  head: "cross",  voice: "down", color: "#64748b" }
 };
 
 /* 音価の表: key = "d" または "d:t"(3連符)。nv=記譜上の音価, dots=付点数, flags=旗の本数 */
@@ -397,6 +398,8 @@ function expressionFor(inst, t, info, n) {
     dv = (isMeasureHead ? 8 : q ? 3 : off8 ? -6 : -10) * k;
   } else if (inst === "snare") {
     dv = n && n.gh ? 0 : back ? 5 : -2; dt = n && n.gh ? 0 : back ? 5 : 1;
+  } else if (inst === "hh_pedal") {
+    dv = isMeasureHead ? 2 : q ? 0 : -4; dt = -3;
   } else if (inst === "kick") {
     dv = isMeasureHead ? 6 : q ? 1 : -4; dt = -3;
   } else if (inst === "crash") { dv = 6; dt = -2; }

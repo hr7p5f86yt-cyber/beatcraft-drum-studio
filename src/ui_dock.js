@@ -3,7 +3,7 @@
  * パッドは state.padPlace=false にすると「パーツを選ぶだけ」になる(旧操作・テスト用)。 */
 state.padPlace = true; state.extend = false; state.zoom = 1;
 const DOCK_DURS = [[192, "全"], [96, "2分"], [48, "4分"], [24, "8分"], [12, "16分"], [6, "32分"]];
-const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック" };
+const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック", hh_pedal: "ペダルHH" };
 
 function buildDock() {
   const d = $("dock"); if (!d) return;

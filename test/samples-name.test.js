@@ -2,7 +2,7 @@
 const { guessInstrument, velRank } = require("../src/samples.js"); let bad = 0;
 const ok = (c, m) => { console.log((c ? "ok: " : "NG: ") + m); if (!c) bad++; };
 const g = [["hihatClosed_OH_P_1.wav", "hh_close"], ["hihatOpen_OH_FF_1.wav", "hh_open"], ["snare_OH_Ghost_1.wav", "snare"], ["kick_OH_F_3.wav", "kick"], ["hiTom_OH_F_1.wav", "hi_tom"],
-  ["loTom_OH_MP_1.wav", "low_tom"], ["floorTom_1.wav", "low_tom"], ["crash1_OH_P_1.wav", "crash"], ["ride1_OH_MP_1.wav", "ride"], ["hihatFoot_OH_MP_1.wav", null]];
+  ["loTom_OH_MP_1.wav", "low_tom"], ["floorTom_1.wav", "low_tom"], ["crash1_OH_P_1.wav", "crash"], ["ride1_OH_MP_1.wav", "ride"], ["hihatFoot_OH_MP_1.wav", "hh_pedal"]];
 g.forEach(([n, e]) => ok(guessInstrument(n) === e, n + " → " + e));
 const order = ["x_Ghost_1", "x_PP_1", "x_P_1", "x_MP_1", "x_F_1", "x_FF_1"].map(velRank);
 ok(order.every((v, i) => i === 0 || v > order[i - 1]), "Ghost<PP<P<MP<F<FF の順");

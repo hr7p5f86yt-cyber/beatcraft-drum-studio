@@ -376,12 +376,14 @@ function omrAnalyzeStaff(bin, w, h, st) {
   // ×印の符頭(ハイハット・シンバル): 2本の斜めの線が交わる形を探す。×が隣とくっついていても見つけられる
   {
     const rc = Math.max(2, Math.round(0.46 * S)), rg = Math.max(2, Math.round(0.3 * S));
-    const cy0 = Math.max(rc, Math.round(y0 - 1.5 * S) - ry0), cy1 = Math.round(y0 + 0.5 * S) - ry0, Dl = new Uint8Array(rw * rh), cand = [];
+    const cy0 = Math.max(rc, Math.round(y0 - 1.5 * S) - ry0), cy1 = Math.round(y4 + 0.9 * S) - ry0, Dl = new Uint8Array(rw * rh), cand = [];
     for (let y = Math.max(1, cy0 - rc); y <= Math.min(rh - 2, cy1 + rc); y++) for (let x = 1; x < rw - 1; x++) {
       let v = 0; for (let dy = -1; dy <= 1 && !v; dy++) for (let dx = -1; dx <= 1; dx++) if (C[(y + dy) * rw + x + dx]) { v = 1; break; }
       Dl[y * rw + x] = v;
     }
+    const yUpMax = Math.round(y0 + 0.5 * S) - ry0, yPedMin = Math.round(y4 + 0.25 * S) - ry0;   // 上声部の×は五線の上〜上端、ペダルハイハットの×は五線のすぐ下
     for (let y = cy0; y <= cy1; y++) for (let x = rc + 1; x < rw - rc - 1; x++) {
+      if (y > yUpMax && y < yPedMin) continue;
       if (inZone(rx0 + x)) continue;
       let hit = 0; for (let k = -rc; k <= rc; k++) hit += Dl[(y + k) * rw + x + k] + Dl[(y - k) * rw + x + k];
       const fr = hit / (2 * (2 * rc + 1)); if (fr < 0.8) continue;
@@ -403,11 +405,12 @@ function omrAnalyzeStaff(bin, w, h, st) {
       }
       return best;
     };
-    acc.forEach(c => { c.ring = c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && ringOf(c); if (c.ring) rcache.push(c.ring); });
+    acc.forEach(c => { c.ped = c.y >= yPedMin; c.ring = !c.ped && c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && ringOf(c); if (c.ring) rcache.push(c.ring); });
     const accF = acc.filter(c => c.ring || !rcache.some(r => Math.abs(r.x - c.x) < 0.7 * S && Math.abs(r.y - c.y) < 0.7 * S));
     accF.forEach(c => {
       let stem = false;
-      { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
+      if (c.ped) { const yy = c.y + Math.round(0.9 * S); if (yy < rh) for (let xx = Math.max(0, Math.round(c.x - 0.9 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.2 * S)); xx++) if (vr[yy * rw + xx] >= 1.2 * S) stem = true; }   // ペダルの×は符幹が左下にのびる
+      else { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
       if (!stem) return;
       const hd = { x: rx0 + c.x, y: ry0 + c.y, kind: "cross" };
       if (c.ring) hd.ring = true;
@@ -435,7 +438,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (hh >= 0.3 && hh <= 8.6 && hasStem(c)) heads.push({ x: rx0 + sx / n, y: ry0 + sy / n, kind: "oval" });
   }
   // (7) パーツの決定: 形(×/丸)と五線上の高さ(半スペース単位 h)から
-  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
+  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0], ["hh_pedal", 9]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
   heads.forEach(hd => {
     hd.h = (hd.y - y0) / (S / 2);
     const tab = hd.kind === "cross" ? CROSS : OVAL; let best = tab[0];

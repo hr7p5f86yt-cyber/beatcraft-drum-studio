@@ -84,8 +84,8 @@ function synthDrum(key, layer, variant, sr) {
     const wa = 0.7 * (0.55 + 0.9 * v); for (let i = 0; i < n; i++) out[i] += wire2[i] * wa * 2.2;
     const stick = biquad(noiseArr(n, rnd), "hp", 3800, 0.7, sr);
     addDecayNoise(out, stick, 0.25 + 0.4 * v, 0.0016 * sr);
-  } else if (key === "hh_close" || key === "hh_open") {
-    const open = key === "hh_open", n = Math.round((open ? 1.4 : 0.22) * sr); out = new Float32Array(n);
+  } else if (key === "hh_close" || key === "hh_open" || key === "hh_pedal") {
+    const open = key === "hh_open", n = Math.round((open ? 1.4 : key === "hh_pedal" ? 0.12 : 0.22) * sr); out = new Float32Array(n);
     const base = [2900, 3300, 3800, 4100, 4700, 5200, 5800, 6300, 6900, 7400, 8000, 8700, 9300, 9800, 10500, 11200, 12000, 12600, 13400, 14300];
     base.forEach((f, k) => {                              // 金属の円盤の細かい倍音。ほぼ同じ高さの2つの音を重ねて「うなり」(ジャラジャラ感)を作る
       const tau = (open ? 0.55 : 0.036) * (1.3 - k * 0.04) * jit(0.15), fr = f * jit(0.035), amp = (0.4 + 0.6 * rnd()) * (0.5 + 0.7 * v * (k / 10)) * 0.55;
@@ -97,6 +97,7 @@ function synthDrum(key, layer, variant, sr) {
     addDecayNoise(out, nz, 0.9 * (0.5 + 0.8 * v), (open ? 0.3 : 0.022) * sr);
     if (open) addDecayNoise(out, nz, 0.25, 0.7 * sr);
     biquad(out, "hp", 3000, 0.7, sr);
+    if (key === "hh_pedal") for (let i = 0; i < n; i++) out[i] *= 0.5;                  // 足で踏む「チッ」: 閉じたハイハットより小さく短く
   } else if (key === "hi_tom" || key === "low_tom") {
     const hi = key === "hi_tom", n = Math.round((hi ? 0.7 : 0.95) * sr); out = new Float32Array(n);
     const fe = (hi ? 205 : 112) * jit(0.03), tauA = (hi ? 0.2 : 0.3), drop = 0.32 + 0.2 * v;

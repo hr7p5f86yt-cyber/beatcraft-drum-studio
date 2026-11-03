@@ -3,7 +3,7 @@
  *            矢印キーで、いま選んでいる音符の長さに合わせた位置へ動く。
  * すべての編集は commit() を通るので、「戻す(Ctrl+Z)」でまとめて取り消せる。
  * (カーソルの移動そのものは、楽譜を変えないので履歴に入れない) */
-const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick" };
+const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick", p: "hh_pedal" };
 const BASE_KEYS = [192, 96, 48, 24, 12, 6];
 const INST_ORDER = Object.keys(INSTRUMENTS);
 
