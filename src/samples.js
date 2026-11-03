@@ -14,9 +14,16 @@ function guessInstrument(name) {
   if (/hi[_ -]?hat|hihat|(^|[^a-z])hh([^a-z]|$)|hat/.test(n)) return /pedal|foot|chick/.test(n) ? null : "hh_close";
   if (/snare|(^|[^a-z])sn([^a-z]|$)|rim/.test(n)) return "snare";
   if (/kick|bass[_ -]?drum|(^|[^a-z])bd([^a-z]|$)/.test(n)) return "kick";
-  if (/floor|low|(^|[^a-z])ft|tom[_ -]?[3-9]/.test(n) && /tom|floor|ft/.test(n)) return "low_tom";
+  if (/floor|low|(^|[^a-z])lo[_ -]?tom|(^|[^a-z])ft|tom[_ -]?[3-9]/.test(n) && /tom|floor|ft/.test(n)) return "low_tom";
   if (/tom/.test(n)) return "hi_tom";
   return null;
+}
+/* ファイル名に強さの印(Ghost / PP / P / MP / F / FF)があれば、その順位を返す(なければ -1)。音の大きさは録音ごとにそろえてあることがあるので、印があれば印を優先する */
+const VEL_TAGS = { ghost: 0, pp: 1, p: 2, mp: 3, mf: 4, f: 5, ff: 6 };
+function velRank(name) {
+  const toks = name.toLowerCase().replace(/\.[a-z0-9]+$/, "").split(/[^a-z0-9]+/);
+  for (const t of toks) if (VEL_TAGS[t] !== undefined) return VEL_TAGS[t];
+  return -1;
 }
 function decodeBytes(bytes) {
   const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext; const ctx = new OC(2, 1, 44100);
@@ -40,7 +47,9 @@ function prepareSample(buf) {
 function addSample(inst, name, bytes, decoded) {
   const p = prepareSample(decoded); if (!p) return false;
   const list = SAMPLES.kit[inst] || (SAMPLES.kit[inst] = []);
-  list.push({ buf: p.buf, rms: p.rms, peak: p.peak, name, bytes }); list.sort((a, b) => a.rms - b.rms);
+  list.push({ buf: p.buf, rms: p.rms, peak: p.peak, name, bytes, rank: velRank(name) });
+  const tagged = list.every(x => x.rank >= 0);                    // 全部に強さの印があれば印の順、なければ音の大きさの順
+  list.sort((a, b) => tagged ? (a.rank - b.rank || a.rms - b.rms) : a.rms - b.rms);
   const mx = Math.max(...list.map(x => x.peak)); list.forEach(x => { x.norm = 0.9 / mx; });      // パーツ内の一番大きい音を基準にそろえる(強弱の差は残す)
   return true;
 }
@@ -87,5 +96,5 @@ async function samplesRestore() {
   } catch (e) { return 0; }
 }
 if (typeof module !== "undefined") {
-  module.exports = Object.assign(module.exports || {}, { guessInstrument });
+  module.exports = Object.assign(module.exports || {}, { guessInstrument, velRank });
 }
