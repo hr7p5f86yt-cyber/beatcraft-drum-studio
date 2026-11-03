@@ -3,7 +3,7 @@
  * パッドは state.padPlace=false にすると「パーツを選ぶだけ」になる(旧操作・テスト用)。 */
 state.padPlace = true; state.extend = false; state.zoom = 1;
 const DOCK_DURS = [[192, "全"], [96, "2分"], [48, "4分"], [24, "8分"], [12, "16分"], [6, "32分"]];
-const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック", hh_pedal: "ペダルHH" };
+const DOCK_SHORT = { crash: "クラッシュ", hh_close: "ハイハット", hh_open: "オープンHH", ride: "ライド", hi_tom: "ハイタム", snare: "スネア", low_tom: "フロア", kick: "キック", hh_pedal: "ペダルHH", sidestick: "サイドスティック" };
 
 function buildDock() {
   const d = $("dock"); if (!d) return;
@@ -30,7 +30,7 @@ function buildDock() {
   const dur = document.createElement("div"); dur.className = "dk-row";
   DOCK_DURS.forEach(([v, t]) => dur.appendChild(mk("dk-btn", t, () => setBase(v), { dbase: v })));
   dur.append(mk("dk-btn", "付点", () => $("dotBtn").click(), { ddot: 1 }), mk("dk-btn", "3連", () => $("tupBtn").click(), { dtup: 1 }),
-    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()),
+    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()), mk("dk-btn", "フラム", () => $("flamBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
     mk("dk-btn", "🥁 音源", () => $("sampleBtn").click()),

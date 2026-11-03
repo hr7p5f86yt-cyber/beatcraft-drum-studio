@@ -3,7 +3,7 @@
  *            矢印キーで、いま選んでいる音符の長さに合わせた位置へ動く。
  * すべての編集は commit() を通るので、「戻す(Ctrl+Z)」でまとめて取り消せる。
  * (カーソルの移動そのものは、楽譜を変えないので履歴に入れない) */
-const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick", p: "hh_pedal" };
+const INST_KEYS = { c: "crash", h: "hh_close", o: "hh_open", r: "ride", t: "hi_tom", s: "snare", l: "low_tom", k: "kick", p: "hh_pedal", i: "sidestick" };
 const BASE_KEYS = [192, 96, 48, 24, 12, 6];
 const INST_ORDER = Object.keys(INSTRUMENTS);
 
@@ -243,6 +243,7 @@ function onKeyDown(e) {
   else if (INST_KEYS[lk]) { placeAt(INST_KEYS[lk], e.shiftKey ? !state.auto : state.auto); }
   else if (lk === "a") applyFlag("acc", "アクセント");
   else if (lk === "g") applyFlag("gh", "ゴースト");
+  else if (lk === "f") applyFlag(e.shiftKey ? "dr" : "fl", e.shiftKey ? "ドラッグ" : "フラム");
   else if (lk === "b") applyBeam();
   else if (lk === "m") applyTuplet("toggle");
   else if (lk === "d") cycleDynamic(e.shiftKey ? -1 : 1);

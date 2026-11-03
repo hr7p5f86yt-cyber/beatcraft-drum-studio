@@ -50,7 +50,8 @@ const INSTRUMENTS = {
   snare:    { name: "Snare",    h: 3,  head: "oval",   voice: "up",   color: "#10b981" },
   low_tom:  { name: "Low-Tom",  h: 5,  head: "oval",   voice: "up",   color: "#f97316" },
   kick:     { name: "Kick",     h: 7,  head: "oval",   voice: "down", color: "#ef4444" },
-  hh_pedal: { name: "HH Pedal", h: 9,  head: "cross",  voice: "down", color: "#64748b" }
+  hh_pedal: { name: "HH Pedal", h: 9,  head: "cross",  voice: "down", color: "#64748b" },
+  sidestick: { name: "Side Stick", h: 3, head: "cross", voice: "up",  color: "#14b8a6" }
 };
 
 /* 音価の表: key = "d" または "d:t"(3連符)。nv=記譜上の音価, dots=付点数, flags=旗の本数 */
@@ -150,7 +151,7 @@ function fillRests(arr, ticks, beat) {
   const pushGap = (from, to) => { for (const r of decomposeGap(from, to - from, beat)) out.push(r); };
   for (const n of arr) {
     if (n.t > pos) pushGap(pos, n.t);
-    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, bm: n.bm, ref: n });
+    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, fl: !!n.fl, dr: !!n.dr, bm: n.bm, ref: n });
     pos = Math.max(pos, n.t + n.d);
   }
   if (pos < ticks) pushGap(pos, ticks);
@@ -225,11 +226,14 @@ function toggleNoteFlag(score, g0, g1, flag) {
   score.measures.forEach((m, k) => ["up", "down"].forEach(v => m[v].forEach(n => {
     const g = starts[k] + n.t; if (g >= g0 && g < g1) targets.push(n);
   })));
+  if (flag === "fl" || flag === "dr") for (let k = targets.length - 1; k >= 0; k--) if (targets[k].i.every(x => x === "kick" || x === "hh_pedal")) targets.splice(k, 1);   // 足の音に装飾音はつけない
   if (!targets.length) return 0;
   const allSet = targets.every(n => n[flag]);
   targets.forEach(n => { if (allSet) delete n[flag]; else n[flag] = true; });
   if (!allSet && flag === "gh") targets.forEach(n => delete n.acc);        // ゴーストとアクセントは両立しない
   if (!allSet && flag === "acc") targets.forEach(n => delete n.gh);
+  if (!allSet && flag === "fl") targets.forEach(n => delete n.dr);             // フラム(装飾音1つ)とドラッグ(2つ)は両立しない
+  if (!allSet && flag === "dr") targets.forEach(n => delete n.fl);
   return targets.length;
 }
 
@@ -381,6 +385,7 @@ function makeLevelFn(score) {
   };
 }
 /* 音符の演奏の強さ(1〜127) */
+const GRACE_MS = 28, GRACE_RATIO = 0.55;                                        // 装飾音の間隔(ms)と、本体に対する強さ
 function noteVelocity(level, n) {
   let v = level;
   if (n.acc) v += ACCENT_BOOST;
@@ -398,6 +403,8 @@ function expressionFor(inst, t, info, n) {
     dv = (isMeasureHead ? 8 : q ? 3 : off8 ? -6 : -10) * k;
   } else if (inst === "snare") {
     dv = n && n.gh ? 0 : back ? 5 : -2; dt = n && n.gh ? 0 : back ? 5 : 1;
+  } else if (inst === "sidestick") {
+    dv = back ? 3 : -3; dt = back ? 4 : 1;
   } else if (inst === "hh_pedal") {
     dv = isMeasureHead ? 2 : q ? 0 : -4; dt = -3;
   } else if (inst === "kick") {
@@ -430,6 +437,10 @@ function buildPlayEvents(score, opt) {
       const e = { gt: seg.start + n.t, i: n.i.slice(), vel: noteVelocity(level(seg.gStart + n.t), n) };
       if (expr) { const info = tsInfo(m.ts), xs = n.i.map(k => expressionFor(k, n.t, info, n)); e.dv = xs.map(x => x.dv); e.dt = xs.map(x => x.dt); }
       ev.push(e);
+      if (n.fl || n.dr) {                                                  // 装飾音: 本体の少し前に、小さい音で1つ(フラム)/2つ(ドラッグ)
+        const k = n.dr ? 2 : 1, main = n.i.filter(x => x !== "kick" && x !== "hh_pedal")[0] || n.i[0];
+        for (let j = 0; j < k; j++) ev.push({ gt: e.gt, i: [main], vel: Math.max(1, Math.round(e.vel * GRACE_RATIO)), grace: (k - j) * GRACE_MS });
+      }
     }));
   });
   ev.sort((a, b) => a.gt - b.gt);
@@ -477,6 +488,8 @@ function migrateScore(raw) {
           if (made) {
             if (n.acc && !n.gh) made.acc = true;
             if (n.gh) made.gh = true;
+            if (n.fl && !n.dr) made.fl = true;
+            if (n.dr) made.dr = true;
             if (n.bm === "break" || n.bm === "join") made.bm = n.bm;
           }
         }

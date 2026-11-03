@@ -171,7 +171,7 @@ function omrDigitShape(ink, x0, y0, x1, y1) {
     if (n >= 0.04 * GW * GH) holes.push({ n, cy: sy / n / GH });
   }
   const colFrac = i => { let n = 0; for (let j = 0; j < GH; j++) n += G[j * GW + i]; return n / GH; }, rowFrac = j => { let n = 0; for (let i = 0; i < GW; i++) n += G[j * GW + i]; return n / GW; };
-  let maxCol = 0; for (let i = 0; i < GW; i++) maxCol = Math.max(maxCol, colFrac(i));
+  let maxCol = 0, colAt = 0; for (let i = 0; i < GW; i++) if (colFrac(i) > maxCol) { maxCol = colFrac(i); colAt = i / GW; }
   let top = 0, base = 0; for (let j = 0; j <= 3; j++) top = Math.max(top, rowFrac(j)); for (let j = GH - 4; j < GH; j++) base = Math.max(base, rowFrac(j));
   const region = (i0, i1, j0, j1) => { let n = 0, t = 0; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { t++; n += G[j * GW + i]; } return n / t; };
   const leftMid = region(0, 5, 6, 13), ur = region(13, 19, 5, 12), lr = region(12, 19, 19, 26), ll = region(0, 6, 21, 28), aspect = bw / bh;
@@ -179,7 +179,7 @@ function omrDigitShape(ink, x0, y0, x1, y1) {
   if (holes.length >= 2) digit = "8";
   else if (holes.length === 1) { let am = 0, mv = 0; for (let i = 0; i < GW; i++) { const v = colFrac(i); if (v > mv) { mv = v; am = i; } }
     const hn = holes[0].n / (GW * GH); digit = (top >= 0.85 && holes[0].cy > 0.6 && hn < 0.1) ? "5" : (hn < 0.15 && mv >= 0.95 && am >= 0.5 * GW && holes[0].cy > 0.4 && holes[0].cy < 0.6) ? "4" : holes[0].cy < 0.4 ? "9" : holes[0].cy > 0.6 ? "6" : "0"; }
-  else if (aspect < 0.5 || (maxCol >= 0.9 && aspect < 0.7)) digit = "1";
+  else if (aspect < 0.5 || (maxCol >= 0.9 && aspect < 0.7 && !(top >= 0.7 && colAt <= 0.3))) digit = "1";      // 縦線が左はしにあって上に横棒がある形は「5」(細い明朝体の5)
   else if (ur >= 0.5 && base >= 0.7 && (lr < 0.5 || (ur >= 0.8 && ll >= 0.7 && lr <= ll))) digit = "2";                 // 2: 右上に弧、左下からの斜め線、下の横棒
   else if (base >= 0.85 && top < 0.9 && leftMid < 0.45 && ur >= 0.3) digit = "2";
   else if (top >= 0.7 && base < 0.5) digit = leftMid >= 0.45 ? "5" : "7";
@@ -373,6 +373,26 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (inZone(rx0 + c.maxx)) continue;                                        // 音部記号・拍子記号
     if (hole && bw >= 0.65 && bw <= 1.8 && bh >= 0.55 && bh <= 1.3 && ((ry0 + (c.miny + c.maxy) / 2 - y0) / (S / 2)) >= 0.3 && hasStem(c)) heads.push({ x: cx, y: cy, kind: "oval" });     // 白い符頭(2分音符など)
   }
+  // 装飾音符(フラム・ドラッグ): 本体の左にある小さな黒い玉(+短い符幹+斜線)。細い線が消えるまで縮めて、小さな芯だけ残るものを探す
+  const graces = [];
+  {
+    const e2 = Math.max(1, Math.round(0.13 * S)), M1 = new Uint8Array(rw * rh), M2 = new Uint8Array(rw * rh), sy0 = Math.max(0, Math.round(y0 - 0.6 * S) - ry0), sy1 = Math.min(rh - 1, Math.round(y4 + 1.0 * S) - ry0);
+    for (let y = sy0; y <= sy1; y++) for (let x = e2; x < rw - e2; x++) { let ok = 1; for (let d = -e2; d <= e2; d++) if (!B[y * rw + x + d]) { ok = 0; break; } M1[y * rw + x] = ok; }
+    for (let y = sy0 + e2; y <= sy1 - e2; y++) for (let x = 0; x < rw; x++) { let ok = 1; for (let d = -e2; d <= e2; d++) if (!M1[(y + d) * rw + x]) { ok = 0; break; } M2[y * rw + x] = ok; }
+    const sn = new Uint8Array(rw * rh), stk = [];
+    for (let y = sy0; y <= sy1; y++) for (let x = 0; x < rw; x++) {
+      if (!M2[y * rw + x] || sn[y * rw + x]) continue;
+      let sx = 0, sy = 0, n = 0, mnx = x, mxx = x, mny = y, mxy = y; stk.length = 0; stk.push(y * rw + x); sn[y * rw + x] = 1;
+      while (stk.length) { const q = stk.pop(), qy = (q / rw) | 0, qx = q - qy * rw; sx += qx; sy += qy; n++; if (qx < mnx) mnx = qx; if (qx > mxx) mxx = qx; if (qy < mny) mny = qy; if (qy > mxy) mxy = qy;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < sy0 || nx >= rw || ny > sy1) continue; const r2 = ny * rw + nx; if (M2[r2] && !sn[r2]) { sn[r2] = 1; stk.push(r2); } } }
+      const cw = (mxx - mnx + 1 + 2 * e2) / S, ch = (mxy - mny + 1 + 2 * e2) / S, cx = rx0 + sx / n, cy = ry0 + sy / n;
+      if (cw < 0.4 || cw > 0.85 || ch < 0.3 || ch > 0.7 || inZone(cx)) continue;
+      let stem = false; const yy = Math.round(sy / n - 0.7 * S);                              // 符幹: 右上に縦線(玉より細い・短い)
+      if (yy >= 0) for (let xx = Math.round(sx / n + 0.1 * S); xx <= Math.min(rw - 1, Math.round(sx / n + 0.7 * S)); xx++) if (vr[yy * rw + xx] >= 0.9 * S) stem = true;
+      if (!stem) continue;
+      graces.push({ x: cx, y: cy, h: (cy - y0) / (S / 2) });
+    }
+  }
   // ×印の符頭(ハイハット・シンバル): 2本の斜めの線が交わる形を探す。×が隣とくっついていても見つけられる
   {
     const rc = Math.max(2, Math.round(0.46 * S)), rg = Math.max(2, Math.round(0.3 * S));
@@ -381,14 +401,15 @@ function omrAnalyzeStaff(bin, w, h, st) {
       let v = 0; for (let dy = -1; dy <= 1 && !v; dy++) for (let dx = -1; dx <= 1; dx++) if (C[(y + dy) * rw + x + dx]) { v = 1; break; }
       Dl[y * rw + x] = v;
     }
-    const yUpMax = Math.round(y0 + 0.5 * S) - ry0, yPedMin = Math.round(y4 + 0.25 * S) - ry0;   // 上声部の×は五線の上〜上端、ペダルハイハットの×は五線のすぐ下
+    const ySsMin = Math.round(y0 + 1.0 * S) - ry0, ySsMax = Math.round(y0 + 2.2 * S) - ry0, yUpMax = Math.round(y0 + 0.5 * S) - ry0, yPedMin = Math.round(y4 + 0.25 * S) - ry0;   // 上声部の×は五線の上〜上端、ペダルハイハットの×は五線のすぐ下
     for (let y = cy0; y <= cy1; y++) for (let x = rc + 1; x < rw - rc - 1; x++) {
-      if (y > yUpMax && y < yPedMin) continue;
+      if (y > yUpMax && y < yPedMin && !(y >= ySsMin && y <= ySsMax)) continue;
       if (inZone(rx0 + x)) continue;
       let hit = 0; for (let k = -rc; k <= rc; k++) hit += Dl[(y + k) * rw + x + k] + Dl[(y - k) * rw + x + k];
       const fr = hit / (2 * (2 * rc + 1)); if (fr < 0.8) continue;
       const gap = C[(y - rg) * rw + x] + C[(y + rg) * rw + x] + C[y * rw + x - rg] + C[y * rw + x + rg];
       if (gap > 2 || (gap === 2 && fr < 0.93)) continue;
+      if (y > yUpMax && y < yPedMin && gap > 0) continue;                                  // 五線の中の×は、4方向すべてのすきまが白いものだけ(黒い符頭を×と見間違えない)
       cand.push({ x, y, sc: fr - 0.3 * gap });
     }
     cand.sort((a, b) => b.sc - a.sc);
@@ -412,12 +433,12 @@ function omrAnalyzeStaff(bin, w, h, st) {
       }
       return false;
     };
-    acc.forEach(c => { c.ped = c.y >= yPedMin; c.ring = !c.ped && c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && (ringOf(c) || (ringAround(c) && { x: c.x, y: c.y })); if (c.ring) rcache.push(c.ring); });
+    acc.forEach(c => { c.ss = c.y > yUpMax && c.y < yPedMin; c.ped = c.y >= yPedMin; c.ring = !c.ped && c.y - Math.round(0.4 * S) >= Math.round(y0 - 1.5 * S) - ry0 - 1 && (ringOf(c) || (ringAround(c) && { x: c.x, y: c.y })); if (c.ring) rcache.push(c.ring); });
     const accF = acc.filter(c => c.ring || !rcache.some(r => Math.abs(r.x - c.x) < 0.7 * S && Math.abs(r.y - c.y) < 0.7 * S));
     accF.forEach(c => {
       let stem = false;
       if (c.ped) { const yy = c.y + Math.round(0.9 * S); if (yy < rh) for (let xx = Math.max(0, Math.round(c.x - 0.9 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.2 * S)); xx++) if (vr[yy * rw + xx] >= 1.9 * S) stem = true; }   // ペダルの×は符幹が左下にのびる
-      else { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
+      else { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= (c.ss ? 2.6 : 1.7) * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
       if (c.ped && stem) { let up = false, dn = false; const ya = c.y - Math.round(0.9 * S), yb = c.y + Math.round(1.6 * S); for (let xx = Math.max(0, Math.round(c.x - 0.9 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.2 * S)); xx++) { if (ya >= 0 && vr[ya * rw + xx] >= 1.0 * S) up = true; if (yb < rh && vr[yb * rw + xx] >= 0.3 * S) dn = true; } if (up || !dn) stem = false; }   // ペダルの×は符幹の先端にある。上にも縦線がのびていれば、旗や休符を×と見間違えたもの
       if (!stem) return;
       const hd = { x: rx0 + c.x, y: ry0 + c.y, kind: "cross" };
@@ -446,7 +467,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (hh >= 0.3 && hh <= 8.6 && hasStem(c)) heads.push({ x: rx0 + sx / n, y: ry0 + sy / n, kind: "oval" });
   }
   // (7) パーツの決定: 形(×/丸)と五線上の高さ(半スペース単位 h)から
-  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0], ["hh_pedal", 9]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
+  const CROSS = [["crash", -2], ["hh_close", -1], ["ride", 0], ["sidestick", 3], ["hh_pedal", 9]], OVAL = [["hi_tom", 1], ["snare", 3], ["low_tom", 5], ["kick", 7]];
   heads.forEach(hd => {
     hd.h = (hd.y - y0) / (S / 2);
     const tab = hd.kind === "cross" ? CROSS : OVAL; let best = tab[0];
@@ -467,6 +488,15 @@ function omrAnalyzeStaff(bin, w, h, st) {
       if (found) hd.dot = true;
     });
   }
+  // 装飾音の確定: 普通の符頭ではなく、五線の中にあり、すぐ右(0.8〜2.6スペース)に同じような高さの本体の音符があるもの
+  for (let k = graces.length - 1; k >= 0; k--) {
+    const g = graces[k];
+    const near = heads.some(q => Math.abs(q.x - g.x) < 0.9 * S && Math.abs(q.y - g.y) < 0.9 * S);
+    const main = heads.filter(q => q.kind === "oval" && q.x - g.x >= 0.8 * S && q.x - g.x <= 2.6 * S && Math.abs(q.y - g.y) <= 1.3 * S).sort((a, b) => a.x - b.x)[0];
+    if (near || g.h < -0.5 || g.h > 7.5 || !main) { graces.splice(k, 1); continue; }
+    g.main = main;
+  }
+  graces.sort((a, b) => a.x - b.x);
   // (9) 休符: 符頭・符幹・旗・連桁・付点のどれでもない、五線の中にあるかたまり。拍の位置を決める手がかり(音符と同じく、その分だけ右に次の拍がある)
   const rests = [];
   {
@@ -477,6 +507,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       if (c.area < 0.22 * S * S || bw < 0.5 || bw > 1.8 || bh < 0.35 || bh > 3.4) continue;
       if (cy < yTop || cy > yBot || inZone(rx0 + c.maxx)) continue;
       if (heads.some(q => Math.abs(q.x - cx) < 0.75 * S && Math.abs(q.y - cy) < 1.0 * S) || rings.some(q => Math.abs(q.cx - cx) < 0.75 * S && Math.abs(q.cy - cy) < 1.0 * S)) continue;
+      if (graces.some(g => Math.abs(g.x - cx) < 0.9 * S && Math.abs(g.y - cy) < 1.5 * S)) continue;      // 装飾音の符幹・斜線
       const L = rx0 + c.minx; if (stemXs.some(sx => sx >= L - 0.45 * S && sx <= L + 0.25 * S)) continue;      // 符幹にくっついた旗
       rests.push({ x: cx, y: cy, w: c.w, h: c.h, L, R: rx0 + c.maxx, up: cy < st.lines[2], dn: cy >= st.lines[2] - 0.3 * S });
     }
@@ -487,7 +518,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     rests.sort((a, b) => a.x - b.x);                                       // 同じ休符が2つに割れたもの・2声部の休符は1つにまとめる
     for (let i = rests.length - 1; i > 0; i--) if (rests[i].x - rests[i - 1].x <= 0.6 * S) { const a = rests[i - 1], b = rests[i]; a.dot = a.dot || b.dot; a.up = a.up || b.up; a.dn = a.dn || b.dn; a.x = (a.x + b.x) / 2; a.R = Math.max(a.R, b.R); rests.splice(i, 1); }
   }
-  return { st, barX, heads, rests, zoneEnd, zonesAt, tsRead, mrests, S };
+  return { st, barX, heads, graces, rests, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
@@ -640,7 +671,8 @@ function omrRecognize(g0, w, h, opt) {
       const qs0 = omrQuantize(evs.map(e => e.x), c, W, T, S, padL, m === 0 || !!zoneEndM, evs.map(e => e.o ? e.o.heads.some(q => q.dot) : !!e.dot)), qs = [];
       evs.forEach((e, i) => { if (e.o) qs.push(qs0[i]); });
       const slots = [];
-      onsets.forEach((o, i) => { const q = qs[i], l = slots[slots.length - 1]; if (l && l.t === q.t) l.heads.push(...o.heads); else slots.push({ t: q.t, tup: q.tup, heads: o.heads.slice() }); });
+      onsets.forEach((o, i) => { const q = qs[i], l = slots[slots.length - 1], gr = (sy.graces || []).filter(g => o.heads.includes(g.main)).length;
+        if (l && l.t === q.t) { l.heads.push(...o.heads); l.gr = Math.max(l.gr || 0, gr); } else slots.push({ t: q.t, tup: q.tup, heads: o.heads.slice(), gr }); });
       slots.forEach(sl => { const seen = new Set(); sl.heads = sl.heads.filter(h => !seen.has(h.inst) && seen.add(h.inst)); });
       const restsT = []; evs.forEach((e, i) => { if (!e.o) restsT.push({ t: qs0[i].t, up: !!e.up, dn: !!e.dn }); else if (e.rup || e.rdn) restsT.push({ t: qs0[i].t, up: !!e.rup, dn: !!e.rdn }); });
       measures.push({ sys: si, idx: measures.length, x0: xl, x1: xr, c, slots, restsT, ev: evs.map((e, i) => Math.round(e.x) + (e.o ? "n" : "r") + (e.dot ? "." : "") + ":" + qs0[i].t + (qs0[i].tup ? "t" : "")), ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
@@ -679,7 +711,7 @@ function omrReadMark(bin, w, bx) {
   return r.text && r.score >= 0.55 ? r.text : "";
 }
 function omrFindTempo(bin, w, st, boxes) {
-  const S = st.S, y0 = st.lines[0], xa = Math.max(0, st.left), xb = Math.round(st.left + 0.55 * (st.right - st.left)), ya = Math.max(0, Math.round(y0 - 6.4 * S)), yb = Math.round(y0 - 2.6 * S);
+  const S = st.S, y0 = st.lines[0], xa = Math.max(0, st.left), xb = Math.round(st.left + 0.55 * (st.right - st.left)), ya = Math.max(0, Math.round(y0 - 6.4 * S)), yb = Math.round(y0 - 1.0 * S);
   const inBox = (x, y) => boxes.some(b => x >= b.xa - 2 && x <= b.xb + 2 && y >= b.ya - 2 && y <= b.yb + 2);
   const rw = xb - xa + 1, rh = yb - ya + 1; if (rw < 10 || rh < 10) return null;
   const lab = new Int32Array(rw * rh), comps = []; const on = (x, y) => bin[(ya + y) * w + xa + x] && !inBox(xa + x, ya + y);
@@ -708,12 +740,13 @@ function omrToMeasures(res, tsKey) {
     const tk = rm.ts || tsKey || "4/4", ts = tsInfo(tk), n = rm.mrN >= 2 ? rm.mrN : 1;
     const m = newMeasure(tk); m.mark = rm.mark || "";
     ["up", "down"].forEach(voice => {
-      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
+      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
       list.forEach((s, i) => {
         const next = list[i + 1], nr = (rm.restsT || []).filter(r => r.t > s.t && (voice === "up" ? r.up : r.dn)).map(r => r.t), gap = Math.min(next ? next.t : ts.ticks, ...nr) - s.t;   // 次の音符か、同じ声部の次の休符まで
         let d = s.tup ? (fitDur(Math.min(gap, 32), true) || 8) : fitDur(Math.min(gap, 48), false);
         if (!d) d = 6;
         s.insts.forEach(inst => toggleNote(m, inst, s.t, d, s.tup));
+        if (s.gr) { const nn = m[voice].find(x => x.t === s.t); if (nn) { if (s.gr >= 2) nn.dr = true; else nn.fl = true; } }      // 装飾音(フラム/ドラッグ)
       });
     });
     out.push(m);

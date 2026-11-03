@@ -84,6 +84,14 @@ function synthDrum(key, layer, variant, sr) {
     const wa = 0.7 * (0.55 + 0.9 * v); for (let i = 0; i < n; i++) out[i] += wire2[i] * wa * 2.2;
     const stick = biquad(noiseArr(n, rnd), "hp", 3800, 0.7, sr);
     addDecayNoise(out, stick, 0.25 + 0.4 * v, 0.0016 * sr);
+  } else if (key === "sidestick") {                    // サイドスティック(リムクリック): 乾いた木の「コッ」
+    const n = Math.round(0.16 * sr); out = new Float32Array(n);
+    addPartial(out, sr, 1180 * jit(0.03), 0.9, 0.012, 0);
+    addPartial(out, sr, 1930 * jit(0.03), 0.55, 0.008, 1);
+    addPartial(out, sr, 3100 * jit(0.04), 0.3, 0.005, 2);
+    const ck = biquad(biquad(noiseArr(n, rnd), "hp", 1800, 0.7, sr), "bp", 3200, 0.9, sr);
+    addDecayNoise(out, ck, 0.55, 0.0045 * sr);
+    for (let i = 0; i < n; i++) out[i] *= (0.5 + 0.5 * v);
   } else if (key === "hh_close" || key === "hh_open" || key === "hh_pedal") {
     const open = key === "hh_open", n = Math.round((open ? 1.4 : key === "hh_pedal" ? 0.12 : 0.22) * sr); out = new Float32Array(n);
     const base = [2900, 3300, 3800, 4100, 4700, 5200, 5800, 6300, 6900, 7400, 8000, 8700, 9300, 9800, 10500, 11200, 12000, 12600, 13400, 14300];

@@ -6,8 +6,8 @@
  * 終了判定は rAF 側で1か所だけ行う(スケジューラ内から停止処理を呼ばない)。 */
 const AUDIO_SR = 44100;
 const AUDIO_OPT = { humanize: true, expr: true, room: 0.35 };           // room: 0〜1(部屋の響きの量)
-const PAN = { crash: -0.45, hh_close: -0.3, hh_open: -0.3, ride: 0.42, hi_tom: -0.18, snare: 0.02, low_tom: 0.3, kick: 0, hh_pedal: -0.3 };
-const SEND = { crash: 0.5, hh_close: 0.22, hh_open: 0.3, ride: 0.4, hi_tom: 0.55, snare: 0.6, low_tom: 0.55, kick: 0.25, hh_pedal: 0.1 };
+const PAN = { crash: -0.45, hh_close: -0.3, hh_open: -0.3, ride: 0.42, hi_tom: -0.18, snare: 0.02, low_tom: 0.3, kick: 0, hh_pedal: -0.3, sidestick: 0.05 };
+const SEND = { crash: 0.5, hh_close: 0.22, hh_open: 0.3, ride: 0.4, hi_tom: 0.55, snare: 0.6, low_tom: 0.55, kick: 0.25, hh_pedal: 0.1, sidestick: 0.35 };
 let audioCtx = null, masterGain = null, dryBus = null, wetBus = null, roomGain = null, openHat = null;
 const waveCache = {}, bufCache = {}, lastVariant = {};
 
@@ -139,7 +139,7 @@ const Player = {
       e.i.forEach((k, n) => {                                   // 演奏の表情: 拍ごとの強弱・タイミングのクセ + ごく小さなランダム
         let vel = e.vel, dt = 0;
         if (e.dv) { vel += e.dv[n] + (Math.random() - 0.5) * 7; dt = e.dt[n] / 1000; }
-        playSound(k, t + jitter + dt, vel);
+        playSound(k, t + jitter + dt - (e.grace ? e.grace / 1000 : 0), vel);               // 装飾音は本体の少し前
       });
     }
     if (this.loop && this.nextIdx >= this.events.length && hz >= this.total) {   // 先頭へ(時刻は連続)

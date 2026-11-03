@@ -12,6 +12,7 @@ function guessInstrument(name) {
   if (/ride|bell/.test(n)) return "ride";
   if (/(open|opn|ohh|o[_ -]?hat).*(hat|hh)|(hat|hh).*(open|opn)|ohh/.test(n)) return "hh_open";
   if (/hi[_ -]?hat|hihat|(^|[^a-z])hh([^a-z]|$)|hat/.test(n)) return /pedal|foot|chick/.test(n) ? "hh_pedal" : "hh_close";
+  if (/side[_ -]?stick|cross[_ -]?stick|rim[_ -]?click/.test(n)) return "sidestick";
   if (/snare|(^|[^a-z])sn([^a-z]|$)|rim/.test(n)) return "snare";
   if (/kick|bass[_ -]?drum|(^|[^a-z])bd([^a-z]|$)/.test(n)) return "kick";
   if (/floor|low|(^|[^a-z])lo[_ -]?tom|(^|[^a-z])ft|tom[_ -]?[3-9]/.test(n) && /tom|floor|ft/.test(n)) return "low_tom";

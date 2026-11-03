@@ -176,6 +176,15 @@ function measureNotesSvg(it, out) {
         out.heads.push({ m: it.idx, voice, t: e.t, inst: k, x, y: cy });
         if (e.info.dots) s += `<circle cx="${f(x + e.hw + (e.gh ? 12 : 5))}" cy="${f(inst.h % 2 === 0 ? cy - S / 2 : cy)}" r="1.5" fill="#000"/>`;
       });
+      if (e.fl || e.dr) {                                       // 装飾音(フラム/ドラッグ): 小さな音符を本体の左に(斜線つき)
+        const k0 = e.i.filter(k => INSTRUMENTS[k].voice === voice && INSTRUMENTS[k].head !== "cross")[0] || e.i[0], hh = INSTRUMENTS[k0].h, gy = it.staffTop + hh * S / 2, n = e.dr ? 2 : 1;
+        for (let j = 0; j < n; j++) {
+          const gx = x - e.hw - 9 - (n - 1 - j) * 8, gsx = gx + (dirUp ? 3.4 : -3.4), ge = dirUp ? gy - 17 : gy + 17;
+          s += `<ellipse cx="${f(gx)}" cy="${f(gy)}" rx="3.6" ry="2.6" transform="rotate(-20 ${f(gx)} ${f(gy)})" fill="#000"/>`
+            + `<line x1="${f(gsx)}" y1="${f(gy)}" x2="${f(gsx)}" y2="${f(ge)}" stroke="#000" stroke-width="1"/>`
+            + `<path d="M${f(gsx - 3)} ${f(dirUp ? ge + 6 : ge - 6)}L${f(gsx + 4)} ${f(dirUp ? ge - 1 : ge + 1)}" stroke="#000" stroke-width="1"/>`;
+        }
+      }
       if (e.gh) {                                               // ゴースト: 音符全体を括弧で囲む
         const lx = x - e.hw - 3.5, rx = x + e.hw + 3.5, y0 = e.top - 6, y1 = e.bot + 6, ym = (y0 + y1) / 2;
         s += `<path d="M${f(lx)} ${f(y0)}Q${f(lx - 5)} ${f(ym)} ${f(lx)} ${f(y1)}M${f(rx)} ${f(y0)}Q${f(rx + 5)} ${f(ym)} ${f(rx)} ${f(y1)}" stroke="#000" stroke-width="1.2" fill="none"/>`;
