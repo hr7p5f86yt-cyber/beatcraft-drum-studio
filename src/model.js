@@ -89,11 +89,11 @@ function measureStarts(score) {
 
 /* ---- 音符の追加・削除 ---- */
 /* 戻り値: "added" | "removed" | "invalid" */
-function toggleNote(measure, instKey, t, d, tup) {
+function toggleNote(measure, instKey, t, d, tup, voice) {   // voice: "up"(1声)/"down"(2声)。省略すると楽器ごとの標準
   const inst = INSTRUMENTS[instKey];
   if (!inst) return "invalid";
   const info = tsInfo(measure.ts);
-  const arr = measure[inst.voice];
+  const arr = measure[voice === "up" || voice === "down" ? voice : inst.voice];
   if (t < 0 || t >= info.ticks) return "invalid";
   const same = arr.find(n => n.t === t);
   if (same && same.i.includes(instKey)) {          // 同じ楽器をもう一度 → 削除
@@ -466,8 +466,8 @@ function migrateScore(raw) {
       if (raw.schemaVersion >= 3 && (Array.isArray(m.up) || Array.isArray(m.down))) {
         for (const v of ["up", "down"]) for (const n of (m[v] || [])) {
           if (!Array.isArray(n.i)) continue;
-          for (const k of n.i) if (INSTRUMENTS[k] && INSTRUMENTS[k].voice === v)
-            toggleIfAbsent(nm, k, n.t | 0, n.d | 0, !!n.tup, ticks);
+          for (const k of n.i) if (INSTRUMENTS[k])
+            toggleIfAbsent(nm, k, n.t | 0, n.d | 0, !!n.tup, ticks, v);
           const made = nm[v].find(x => x.t === (n.t | 0));
           if (made) {
             if (n.acc && !n.gh) made.acc = true;
@@ -504,12 +504,12 @@ function migrateScore(raw) {
     return { ok: false, error: "読み込みに失敗しました: " + e.message };
   }
 }
-function toggleIfAbsent(measure, k, t, d, tup, ticks) {
-  const n = measure[INSTRUMENTS[k].voice].find(x => x.t === t);
+function toggleIfAbsent(measure, k, t, d, tup, ticks, voice) {
+  const n = measure[voice || INSTRUMENTS[k].voice].find(x => x.t === t);
   if (n && n.i.includes(k)) return;
   if (!isValidDur(d, tup)) d = fitDur(Math.max(6, d), tup) || 12;
   if (t >= ticks) return;
-  toggleNote(measure, k, t, d, tup);
+  toggleNote(measure, k, t, d, tup, voice);
 }
 function clampInt(v, lo, hi, def) {
   const n = parseInt(v, 10); return isNaN(n) ? def : Math.min(hi, Math.max(lo, n));

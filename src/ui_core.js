@@ -1,6 +1,6 @@
 /* ===== ui_core.js : 状態・描画・入力・再生UI・元に戻す ===== */
 const $ = id => document.getElementById(id);
-const state = { follow: true, score: newScore(), inst: "hh_close", base: 24, dotted: false, tuplet: false, mode: "input", view: null,
+const state = { voice: "auto", follow: true, score: newScore(), inst: "hh_close", base: 24, dotted: false, tuplet: false, mode: "input", view: null,
                 cursor: null, anchor: null, auto: true };
 let history = [], hIdx = -1, rafId = 0, renderQueued = false, toastTimer = 0;
 function currentBpmValue() { return state.score.bpm; }
@@ -83,8 +83,8 @@ function onScoreClick(ev) {
   if (state.mode === "select" || ev.shiftKey || state.extend) { const ex = (ev.shiftKey || state.extend) && !!state.cursor; setCursor({ m: it.idx, t: tick }, ex); return; }   // 位置の選択だけ(Shift+クリックで範囲選択)
   materializeSim(state.score, it.idx);
   const measure = state.score.measures[it.idx];
-  const before = measure[INSTRUMENTS[state.inst].voice].find(n => n.t === tick);
-  const res = toggleNote(measure, state.inst, tick, cd.d, cd.tup);
+  const before = measure[placeVoice(state.inst)].find(n => n.t === tick);
+  const res = toggleNote(measure, state.inst, tick, cd.d, cd.tup, placeVoice(state.inst));
   if (res === "invalid") { showStatus("ここには置けません(小節の終わりを超えます)", "err"); return; }
   if (res === "added") {
     playSound(state.inst);
@@ -92,6 +92,14 @@ function onScoreClick(ev) {
   }
   state.cursor = { m: it.idx, t: tick }; state.anchor = null;
   commit();
+}
+/* 入力する声部: 自動(手は1声・足は2声)/ 1声 / 2声 */
+function placeVoice(inst) { return state.voice === "up" || state.voice === "down" ? state.voice : INSTRUMENTS[inst].voice; }
+const VOICE_LABEL = { auto: "声部:自動", up: "声部:1声(上向き)", down: "声部:2声(下向き)" };
+function cycleVoice() {
+  state.voice = state.voice === "auto" ? "up" : state.voice === "up" ? "down" : "auto";
+  document.querySelectorAll("[data-voice-btn]").forEach(b => { b.textContent = VOICE_LABEL[state.voice]; b.classList.toggle("active", state.voice !== "auto"); });
+  showStatus(state.voice === "auto" ? "声部: 自動(手で叩くものは1声、足で操作するものは2声)" : "声部: " + (state.voice === "up" ? "1声(符尾は上向き)" : "2声(符尾は下向き)") + " に入力します");
 }
 function eraseNear(it, p) {
   let best = null, bd = 20;

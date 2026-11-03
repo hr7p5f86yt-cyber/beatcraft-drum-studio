@@ -94,7 +94,7 @@ function placeAt(instKey, advance) {
   const cd = currentDur(); if (!cd) { showStatus("この音価では3連符・付点を使えません", "err"); return; }
   const cur = clampPos(state.cursor || { m: 0, t: 0 }), ms = state.score.measures;
   state.inst = instKey; state.mode = "input"; materializeSim(state.score, cur.m);
-  const res = toggleNote(ms[cur.m], instKey, cur.t, cd.d, cd.tup);
+  const res = toggleNote(ms[cur.m], instKey, cur.t, cd.d, cd.tup, placeVoice(instKey));
   if (res === "invalid") { showStatus("ここには置けません(小節の終わりを超えます)", "err"); return; }
   if (res === "added") playSound(instKey, 0, previewVelocity(cur));
   let next = cur;

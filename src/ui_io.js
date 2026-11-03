@@ -164,7 +164,7 @@ function bindEvents() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("scoreHost", "click", onScoreClick);
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
-  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore);
+  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("voiceBtn", "click", cycleVoice);
   on("bpmRange", "input", e => changeBpm(e.target.value));
   on("titleInput", "change", e => { state.score.title = e.target.value.trim().slice(0, 80) || "マイ・ドラム・スコア"; commit(); });
   document.querySelectorAll("[data-base]").forEach(b => b.addEventListener("click", () => setBase(+b.dataset.base)));
