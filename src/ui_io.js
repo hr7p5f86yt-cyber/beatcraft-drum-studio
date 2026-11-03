@@ -4,6 +4,24 @@ let storageWarned = false, saveTimer = 0;
 
 function storageGet(k) { try { return { ok: true, value: localStorage.getItem(k) }; } catch (e) { return { ok: false, error: e.message }; } }
 function storageSet(k, v) { try { localStorage.setItem(k, v); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } }
+/* 最新版の確認と更新: 公開ページを「キャッシュなし」で取りにいき、版番号が違えば読み込み直す(楽譜は自動保存してから) */
+async function checkUpdate() {
+  const msg = $("updateMsg"), btn = $("updateBtn"), cur = (document.querySelector(".badge") || {}).textContent || "";
+  const say = t => { if (msg) msg.textContent = " " + t; showStatus(t); };
+  if (location.protocol === "file:") { say("この環境(ファイル直開き)では更新確認できません"); return; }
+  btn.disabled = true; say("最新版を確認しています…");
+  try {
+    const base = location.href.split("#")[0].split("?")[0];
+    const res = await fetch(base + "?chk=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const m = (await res.text()).match(/class="badge">([^<]+)</), latest = m ? m[1].trim() : "";
+    if (!latest) throw new Error("版番号が見つかりません");
+    if (latest === cur.trim()) { say("最新版です(" + cur.trim() + ")"); btn.disabled = false; return; }
+    say("新しい版 " + latest + " を読み込みます…"); autoSave();
+    try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch (e) { /* 無くても更新はできる */ }
+    setTimeout(() => location.replace(base + "?v=" + encodeURIComponent(latest) + "&t=" + Date.now()), 400);
+  } catch (e) { say("更新確認に失敗しました(" + e.message + ")。通信を確認してもう一度お試しください"); btn.disabled = false; }
+}
 function autoSave() {
   const r = storageSet(KEY_LATEST, JSON.stringify(state.score));
   if (!r.ok && !storageWarned) {
@@ -180,6 +198,7 @@ function bindEvents() {
   on("beamBtn", "click", applyBeam); on("tupConvBtn", "click", () => applyTuplet("to")); on("tupOffBtn", "click", () => applyTuplet("from"));
   on("simBtn", "click", toggleSimHere); on("autoSimBtn", "click", applyAutoSim); on("autoMrBtn", "click", applyAutoMr);
   on("helpBtn", "click", openHelp);
+  on("updateBtn", "click", checkUpdate);
   on("autoAdvance", "change", e => { state.auto = e.target.checked; });
   on("followChk", "change", e => { state.follow = e.target.checked; updateButtons(); });
   on("exprChk", "change", e => { AUDIO_OPT.expr = e.target.checked; Player.rebuild(state.score); });
