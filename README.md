@@ -29,6 +29,16 @@ node test/make-wavs.js
 node test/e2e.js index.html
 ```
 
+## 音源(任意)
+
+アプリは合成音で鳴りますが、録音済みの音を読み込んで使うこともできます(「🥁 録音した音を使う」)。**音源ファイルはこのリポジトリに含まれていません。** 各自で入手し、自分の端末に読み込んでください(読み込んだ音は、その端末のブラウザの中にだけ保存されます)。
+
+- ファイル名からパーツを自動で判定します(例: `snare_…`, `hihatClosed_…`, `hihatOpen_…`, `kick_…`, `hiTom_…`, `loTom_…`, `crash…`, `ride…`)。
+- ファイル名に `Ghost / PP / P / MP / F / FF` があれば、その順(弱い→強い)で演奏の強さに割り当てます。
+- 読み込める合計は約80MBまでです。パーツごとに数個〜10個ほど選ぶのがおすすめです。
+
+動作を確かめた音源の例: **Salamander Drumkit**(Alexander Holm 作、[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/))。入手先は [Internet Archive](https://archive.org/details/SalamanderDrumkit) などです(配布元の案内: <https://github.com/endolith/Salamander-Drumkit>)。音源を配布・公開する場合は、各音源のライセンスに従って作者名の表記などを行ってください。
+
 ## ライセンス
 
 コードは MIT。録音した音源を使う場合は、再配布してよいライセンスのものだけを使ってください(`samples/README.md`)。
