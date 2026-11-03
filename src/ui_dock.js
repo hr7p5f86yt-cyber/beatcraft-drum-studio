@@ -33,13 +33,15 @@ function buildDock() {
     mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
+    mk("dk-btn", "🥁 音源", () => $("sampleBtn").click()),
     mk("dk-btn", "📄 新規", newBlankScore),
     mk("dk-btn", "% 表示:記号", toggleSimStyle, { simstyleBtn: 1 }),
     mk("dk-btn", VOICE_LABEL[state.voice], cycleVoice, { voiceBtn: 1 }),
     mk("dk-btn", "休符で進む", () => { needCursor(); const r = stepCursor(state.score, state.cursor, stepNow(), 1); if (!r.overflow) setCursor(r, state.extend); }));
   d.append(pads, nav, dur);
   document.body.classList.add("has-dock");
-  $("advBtn").addEventListener("click", () => { document.body.classList.toggle("show-adv"); $("advBtn").classList.toggle("active", document.body.classList.contains("show-adv")); });
+  $("advClose").addEventListener("click", () => { document.body.classList.remove("show-adv", "adv-sheet"); $("advBtn").classList.remove("active"); });
+  $("advBtn").addEventListener("click", () => { document.body.classList.toggle("show-adv"); document.body.classList.toggle("adv-sheet", document.body.classList.contains("show-adv")); $("advBtn").classList.toggle("active", document.body.classList.contains("show-adv")); });
 }
 function bpmBox() {
   const w = document.createElement("label"); w.className = "dk-bpm"; w.innerHTML = '♩<input type="range" id="dkBpm" min="40" max="240" value="120"><b id="dkBpmVal">120</b>';

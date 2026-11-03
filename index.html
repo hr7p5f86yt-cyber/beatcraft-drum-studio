@@ -75,6 +75,9 @@ table.keys td:first-child{white-space:nowrap}
 body.has-dock{padding-bottom:178px}
 body.has-dock #scorePanel{order:-1}
 body.has-dock:not(.show-adv) #advPanel{display:none}
+#advClose{display:none}
+body.has-dock.show-adv.adv-sheet #advPanel{position:fixed;left:8px;right:8px;top:8px;bottom:186px;z-index:70;overflow:auto;box-shadow:0 0 0 100vmax rgba(0,0,0,.6);-webkit-overflow-scrolling:touch}
+body.has-dock.show-adv.adv-sheet #advClose{display:inline-block;position:sticky;top:0;z-index:2;align-self:flex-end}
 .dk-bpm{display:flex;align-items:center;gap:4px;color:var(--sub);font-size:.75rem;flex:0 0 auto}.dk-bpm input{width:90px}
 body.has-dock .toast{bottom:200px}
 @media (pointer:coarse){button{min-height:44px}#scoreSvg{cursor:default}}
@@ -85,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.1</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.2</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -95,6 +98,7 @@ body.has-dock .toast{bottom:200px}
 <div class="main">
   <div id="storageBanner" class="banner no-print">この環境では自動保存(ブラウザの保存領域)が使えません。作った楽譜は「📂 開く」→「バックアップ」でテキストとして控えてください。</div>
   <div class="panel no-print" id="advPanel">
+    <button id="advClose" class="small primary">✕ 閉じる</button>
     <div class="row">
       <div class="group">
         <button id="playBtn" class="ok">▶ 再生</button><button id="stopBtn">⏹ 停止</button><button id="loopBtn">🔁 ループ</button>
@@ -2351,13 +2355,15 @@ function buildDock() {
     mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
+    mk("dk-btn", "🥁 音源", () => $("sampleBtn").click()),
     mk("dk-btn", "📄 新規", newBlankScore),
     mk("dk-btn", "% 表示:記号", toggleSimStyle, { simstyleBtn: 1 }),
     mk("dk-btn", VOICE_LABEL[state.voice], cycleVoice, { voiceBtn: 1 }),
     mk("dk-btn", "休符で進む", () => { needCursor(); const r = stepCursor(state.score, state.cursor, stepNow(), 1); if (!r.overflow) setCursor(r, state.extend); }));
   d.append(pads, nav, dur);
   document.body.classList.add("has-dock");
-  $("advBtn").addEventListener("click", () => { document.body.classList.toggle("show-adv"); $("advBtn").classList.toggle("active", document.body.classList.contains("show-adv")); });
+  $("advClose").addEventListener("click", () => { document.body.classList.remove("show-adv", "adv-sheet"); $("advBtn").classList.remove("active"); });
+  $("advBtn").addEventListener("click", () => { document.body.classList.toggle("show-adv"); document.body.classList.toggle("adv-sheet", document.body.classList.contains("show-adv")); $("advBtn").classList.toggle("active", document.body.classList.contains("show-adv")); });
 }
 function bpmBox() {
   const w = document.createElement("label"); w.className = "dk-bpm"; w.innerHTML = '♩<input type="range" id="dkBpm" min="40" max="240" value="120"><b id="dkBpmVal">120</b>';
