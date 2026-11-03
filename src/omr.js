@@ -518,7 +518,21 @@ function omrAnalyzeStaff(bin, w, h, st) {
     rests.sort((a, b) => a.x - b.x);                                       // 同じ休符が2つに割れたもの・2声部の休符は1つにまとめる
     for (let i = rests.length - 1; i > 0; i--) if (rests[i].x - rests[i - 1].x <= 0.6 * S) { const a = rests[i - 1], b = rests[i]; a.dot = a.dot || b.dot; a.up = a.up || b.up; a.dn = a.dn || b.dn; a.x = (a.x + b.x) / 2; a.R = Math.max(a.R, b.R); rests.splice(i, 1); }
   }
-  return { st, barX, heads, graces, rests, zoneEnd, zonesAt, tsRead, mrests, S };
+  // 繰り返し記号: 小節線のそばに、2・3間と3・4間(中央の2つのすきま)の黒い点が縦に2つ並ぶ。左側 = 終わり(:‖)、右側 = はじまり(‖:)
+  const repEnd = [], repStart = [];
+  {
+    const r1 = Math.max(1, Math.floor(0.1 * S)), yA = Math.round(y0 + 1.5 * S), yB = Math.round(y0 + 2.5 * S);
+    const disc = (px, py) => { for (let dy = -r1; dy <= r1; dy++) for (let dx = -r1; dx <= r1; dx++) if (dx * dx + dy * dy <= r1 * r1 + 1 && !inkB(px + dx, py + dy)) return false; return true; };
+    const pair = px => disc(px, yA) && disc(px, yB) && !inkB(px, Math.round(y0 + 0.5 * S)) && !inkB(px, Math.round(y4 - 0.5 * S));
+    const full = x => { let n = 0; for (let y = Math.round(y0); y <= Math.round(y4); y++) n += bin[y * w + x]; return n >= (y4 - y0) * 0.95; };
+    for (let k = 1; k < barX.length; k++) {
+      const x = Math.round(barX[k]); let lo = x, hi = x; for (let d = 0; d <= Math.round(1.3 * S); d++) { if (full(x - d)) lo = x - d; if (full(x + d)) hi = x + d; }
+      let e = false, s0 = false; const thick = hi - lo + 1 >= 0.3 * S;                      // 繰り返しの小節線は、太い線をふくむ
+      if (thick) for (let d = Math.round(0.25 * S); d <= Math.round(1.3 * S) && !(e && s0); d++) { if (!e && pair(lo - d)) e = true; if (!s0 && k + 1 < barX.length && pair(hi + d)) s0 = true; }
+      repEnd[k] = e; repStart[k] = s0;
+    }
+  }
+  return { st, barX, repEnd, repStart, heads, graces, rests, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
@@ -675,7 +689,7 @@ function omrRecognize(g0, w, h, opt) {
         if (l && l.t === q.t) { l.heads.push(...o.heads); l.gr = Math.max(l.gr || 0, gr); } else slots.push({ t: q.t, tup: q.tup, heads: o.heads.slice(), gr }); });
       slots.forEach(sl => { const seen = new Set(); sl.heads = sl.heads.filter(h => !seen.has(h.inst) && seen.add(h.inst)); });
       const restsT = []; evs.forEach((e, i) => { if (!e.o) restsT.push({ t: qs0[i].t, up: !!e.up, dn: !!e.dn }); else if (e.rup || e.rdn) restsT.push({ t: qs0[i].t, up: !!e.rup, dn: !!e.rdn }); });
-      measures.push({ sys: si, idx: measures.length, x0: xl, x1: xr, c, slots, restsT, ev: evs.map((e, i) => Math.round(e.x) + (e.o ? "n" : "r") + (e.dot ? "." : "") + ":" + qs0[i].t + (qs0[i].tup ? "t" : "")), ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
+      measures.push({ sys: si, idx: measures.length, rs: !!sy.repStart[m], re: !!sy.repEnd[m + 1], x0: xl, x1: xr, c, slots, restsT, ev: evs.map((e, i) => Math.round(e.x) + (e.o ? "n" : "r") + (e.dot ? "." : "") + ":" + qs0[i].t + (qs0[i].tup ? "t" : "")), ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
     }
   });
   return { ok: true, skew, gray: g, w, h, S, systems, measures, padL, bpm, tsFound };
@@ -738,7 +752,7 @@ function omrToMeasures(res, tsKey) {
   const out = [];
   res.measures.forEach(rm => {
     const tk = rm.ts || tsKey || "4/4", ts = tsInfo(tk), n = rm.mrN >= 2 ? rm.mrN : 1;
-    const m = newMeasure(tk); m.mark = rm.mark || "";
+    const m = newMeasure(tk); m.mark = rm.mark || ""; m.rs = !!rm.rs; m.re = !!rm.re;
     ["up", "down"].forEach(voice => {
       const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
       list.forEach((s, i) => {
