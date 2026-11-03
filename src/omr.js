@@ -407,7 +407,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     const accF = acc.filter(c => c.ring || !rcache.some(r => Math.abs(r.x - c.x) < 0.7 * S && Math.abs(r.y - c.y) < 0.7 * S));
     accF.forEach(c => {
       let stem = false;
-      for (const yy of [c.y - Math.round(0.8 * S), c.y + Math.round(0.8 * S)]) { if (yy < 0 || yy >= rh) continue; for (let xx = Math.max(0, Math.round(c.x - 0.7 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.7 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }
+      { const yy = c.y - Math.round(0.8 * S); if (yy >= 0 && yy < rh) for (let xx = Math.max(0, Math.round(c.x + 0.1 * S)); xx <= Math.min(rw - 1, Math.round(c.x + 0.9 * S)); xx++) if (vr[yy * rw + xx] >= 1.7 * S) stem = true; }   // 上声部の×は符幹が右上にのびる(下からくるキックの符幹・休符は除く)
       if (!stem) return;
       const hd = { x: rx0 + c.x, y: ry0 + c.y, kind: "cross" };
       if (c.ring) hd.ring = true;
