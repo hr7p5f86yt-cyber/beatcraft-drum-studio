@@ -88,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.2</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.3</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -1410,16 +1410,17 @@ function omrDigitShape(ink, x0, y0, x1, y1) {
   let maxCol = 0; for (let i = 0; i < GW; i++) maxCol = Math.max(maxCol, colFrac(i));
   let top = 0, base = 0; for (let j = 0; j <= 3; j++) top = Math.max(top, rowFrac(j)); for (let j = GH - 4; j < GH; j++) base = Math.max(base, rowFrac(j));
   const region = (i0, i1, j0, j1) => { let n = 0, t = 0; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { t++; n += G[j * GW + i]; } return n / t; };
-  const leftMid = region(0, 5, 6, 13), aspect = bw / bh;
+  const leftMid = region(0, 5, 6, 13), ur = region(13, 19, 5, 12), lr = region(12, 19, 19, 26), ll = region(0, 6, 21, 28), aspect = bw / bh;
   let digit;
   if (holes.length >= 2) digit = "8";
   else if (holes.length === 1) { let am = 0, mv = 0; for (let i = 0; i < GW; i++) { const v = colFrac(i); if (v > mv) { mv = v; am = i; } }
     const hn = holes[0].n / (GW * GH); digit = (top >= 0.85 && holes[0].cy > 0.6 && hn < 0.1) ? "5" : (hn < 0.15 && mv >= 0.95 && am >= 0.5 * GW && holes[0].cy > 0.4 && holes[0].cy < 0.6) ? "4" : holes[0].cy < 0.4 ? "9" : holes[0].cy > 0.6 ? "6" : "0"; }
   else if (aspect < 0.5 || (maxCol >= 0.9 && aspect < 0.7)) digit = "1";
-  else if (base >= 0.85 && top < 0.9 && leftMid < 0.45) digit = "2";
+  else if (ur >= 0.5 && base >= 0.7 && (lr < 0.5 || (ur >= 0.8 && ll >= 0.7 && lr <= ll))) digit = "2";                 // 2: 右上に弧、左下からの斜め線、下の横棒
+  else if (base >= 0.85 && top < 0.9 && leftMid < 0.45 && ur >= 0.3) digit = "2";
   else if (top >= 0.7 && base < 0.5) digit = leftMid >= 0.45 ? "5" : "7";
-  else digit = leftMid >= 0.45 ? "5" : "3";
-  return { digit, holes: holes.length, maxCol, top, base, leftMid, aspect };
+  else digit = (ur < 0.3 || leftMid >= 0.45) ? "5" : "3";
+  return { digit, holes: holes.length, maxCol, top, base, leftMid, ur, lr, ll, aspect };
 }
 
 /* 範囲 [x0..x1]×[y0..y1] にある数字を左から読む。戻り値: { text, score } または null */
