@@ -1,7 +1,7 @@
 /* ===== ui_import.js : 画像・PDF・写真から楽譜を取り込む画面 =====
  * 画像(PNG/JPEG/写真)はそのまま、PDFは pdf.js(必要になった時だけ cdnjs から読み込む)で1ページを画像にして、
  * omr.js で読み取る。結果は「検出した位置」を元画像に重ねて確認してから、楽譜に取り込む。 */
-const IMP = { res: null, ts: "4/4", file: null, pdf: null, page: 1, busy: false, lastCanvas: null };
+const IMP = { results: [], res: null, ts: "4/4", file: null, pdf: null, page: 1, busy: false, lastCanvas: null };
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const OMR_COLORS = { crash: "#f59e0b", hh_close: "#2563eb", hh_open: "#06b6d4", ride: "#8b5cf6", hi_tom: "#ec4899", snare: "#10b981", low_tom: "#f97316", kick: "#ef4444" };
@@ -63,8 +63,8 @@ function recognizeCanvas(c, ts) {
 }
 
 /* 検出結果を元画像に重ねて表示 */
-function drawPreview(res) {
-  const box = $("impPreview"); box.textContent = "";
+function drawPreview(res, label, keep) {
+  const box = $("impPreview"); if (!keep) box.textContent = "";
   const full = document.createElement("canvas"); full.width = res.w; full.height = res.h;
   const g = full.getContext("2d"), im = g.createImageData(res.w, res.h);
   for (let i = 0; i < res.w * res.h; i++) { const v = res.gray[i]; im.data[4 * i] = im.data[4 * i + 1] = im.data[4 * i + 2] = v; im.data[4 * i + 3] = 255; }
@@ -77,34 +77,43 @@ function drawPreview(res) {
     const y0 = Math.max(0, Math.round(sy.st.lines[0] - res.S * 5.5)), y1 = Math.min(res.h, Math.round(sy.st.lines[4] + res.S * 5)), x0 = Math.max(0, Math.round(sy.st.left - 10)), x1 = Math.min(res.w, Math.round(sy.st.right + 10));
     const c = document.createElement("canvas"); c.width = x1 - x0; c.height = y1 - y0; c.getContext("2d").drawImage(full, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
     c.style.cssText = "width:100%;height:auto;display:block;background:#fff;border-radius:4px";
-    const cap = document.createElement("div"); cap.className = "help"; cap.textContent = `${i + 1}段目`;
+    const cap = document.createElement("div"); cap.className = "help"; cap.textContent = `${label || ""}${i + 1}段目`;
     box.append(cap, c);
   });
 }
 
 async function runImport() {
-  if (IMP.busy || !IMP.file) return; IMP.busy = true; $("impApply").disabled = true; $("impPreview").textContent = "";
+  if (IMP.busy || !IMP.file) return; IMP.busy = true; $("impApply").disabled = true; $("impPreview").textContent = ""; IMP.results = []; IMP.res = null;
   try {
     impStatus("読み取り中…(数秒かかります)");
     await new Promise(r => setTimeout(r, 30));
-    const c = await fileToCanvas(IMP.file, IMP.page);
-    $("impPage").style.display = IMP.pdf ? "flex" : "none";
-    if (IMP.pdf) $("impPageInfo").textContent = `${IMP.page} / ${IMP.pdf.numPages} ページ`;
-    await new Promise(r => setTimeout(r, 30));
-    const res = recognizeCanvas(c, IMP.ts);
-    if (!res.ok) { IMP.res = null; impStatus(res.error, true); return; }
-    IMP.res = res;
-    const n = omrCount(res);
-    if (!n) { impStatus("五線は見つかりましたが、音符を検出できませんでした。明るく、まっすぐ、大きく撮影してお試しください。", true); drawPreview(res); return; }
-    impStatus(`${res.systems.length}段・${res.measures.length}小節・${n}個の音符を検出しました(傾き補正 ${res.skew.toFixed(1)}°)。下の画像で、色つきの四角が検出位置です。取り込み後に手直ししてください。`);
-    drawPreview(res); $("impApply").disabled = false;
-  } catch (e) { IMP.res = null; impStatus("読み取りに失敗しました: " + e.message, true); console.error(e); }
+    let c = await fileToCanvas(IMP.file, IMP.page);
+    const isPdf = !!IMP.pdf, all = isPdf && $("impAll").checked, total = isPdf ? IMP.pdf.numPages : 1;
+    $("impAllWrap").style.display = isPdf ? "inline-flex" : "none"; $("impPage").style.display = isPdf && !all ? "flex" : "none";
+    if (isPdf && !all) $("impPageInfo").textContent = `${IMP.page} / ${total} ページ`;
+    const pages = all ? Array.from({ length: total }, (_, i) => i + 1) : [IMP.page]; let ts = IMP.ts, skipped = [];
+    for (let k = 0; k < pages.length; k++) {
+      const pn = pages[k];
+      if (all) { impStatus(`読み取り中… ${pn} / ${total} ページ`); await new Promise(r => setTimeout(r, 30)); if (k > 0 || pn !== IMP.page) c = await fileToCanvas(IMP.file, pn); }
+      const res = recognizeCanvas(c, ts); c = null;
+      if (!res.ok || !omrCount(res)) { skipped.push(pn); if (!all) { impStatus(res.ok ? "五線は見つかりましたが、音符を検出できませんでした。明るく、まっすぐ、大きく撮影してお試しください。" : res.error, true); if (res.ok) drawPreview(res); } continue; }
+      drawPreview(res, all ? `${pn}ページ ` : "", IMP.results.length > 0);
+      res.gray = null; IMP.results.push({ page: pn, res });
+      const last = res.measures[res.measures.length - 1]; if (last && last.ts) ts = last.ts;     // 次のページへ拍子を引き継ぐ
+    }
+    if (!IMP.results.length) { if (all) impStatus("どのページからも楽譜を検出できませんでした。", true); return; }
+    IMP.res = IMP.results[0].res;
+    const nm = IMP.results.reduce((a, r) => a + r.res.measures.reduce((x, m) => x + (m.mrN >= 2 ? m.mrN : 1), 0), 0), nn = IMP.results.reduce((a, r) => a + omrCount(r.res), 0);
+    const r0 = IMP.results[0].res;
+    impStatus(`${all ? IMP.results.length + "ページ・" : ""}${r0.systems.length}段${all ? "(最初のページ)" : ""}・${nm}小節・${nn}個の音符を検出しました${all ? "" : "(傾き補正 " + r0.skew.toFixed(1) + "°)"}${r0.bpm ? "・テンポ" + r0.bpm : ""}。${skipped.length ? "楽譜が見つからなかったページ: " + skipped.join(",") + "。" : ""}下の画像で、色つきの四角が検出位置です。取り込み後に手直ししてください。`);
+    $("impApply").disabled = false;
+  } catch (e) { IMP.res = null; IMP.results = []; impStatus("読み取りに失敗しました: " + e.message, true); console.error(e); }
   finally { IMP.busy = false; }
 }
 
 function applyImport() {
-  if (!IMP.res) return;
-  const ms = omrToMeasures(IMP.res, IMP.ts); if (!ms.length) { impStatus("取り込める小節がありません", true); return; }
+  if (!IMP.results || !IMP.results.length) return;
+  const ms = []; IMP.results.forEach(r => ms.push(...omrToMeasures(r.res, IMP.ts))); if (!ms.length) { impStatus("取り込める小節がありません", true); return; }
   const mode = document.querySelector('input[name="impMode"]:checked').value;
   Player.stop(); hidePlayhead();
   if (mode === "replace") state.score.measures = ms; else state.score.measures.push(...ms);
@@ -118,6 +127,7 @@ function bindImport() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("importBtn", "click", openImport);
   on("impFile", "change", e => { const f = e.target.files && e.target.files[0]; if (!f) return; IMP.file = f; IMP.page = 1; IMP.pdf = null; $("impName").textContent = f.name; runImport(); e.target.value = ""; });
+  on("impAll", "change", () => { if (IMP.file) runImport(); });
   on("impTs", "change", e => { IMP.ts = e.target.value; if (IMP.file) runImport(); });
   on("impPrev", "click", () => { if (IMP.page > 1) { IMP.page--; runImport(); } });
   on("impNext", "click", () => { if (IMP.pdf && IMP.page < IMP.pdf.numPages) { IMP.page++; runImport(); } });

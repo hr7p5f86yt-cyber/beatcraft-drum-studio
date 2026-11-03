@@ -166,6 +166,8 @@ function bindEvents() {
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
   on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("voiceBtn", "click", cycleVoice);
   on("bpmRange", "input", e => changeBpm(e.target.value));
+  on("subtitleInput", "change", e => { state.score.subtitle = e.target.value.trim().slice(0, 80); commit(); });
+  on("composerInput", "change", e => { state.score.composer = e.target.value.trim().slice(0, 80); commit(); });
   on("titleInput", "change", e => { state.score.title = e.target.value.trim().slice(0, 80) || "マイ・ドラム・スコア"; commit(); });
   document.querySelectorAll("[data-base]").forEach(b => b.addEventListener("click", () => setBase(+b.dataset.base)));
   on("dotBtn", "click", () => { state.dotted = !state.dotted; if (state.dotted) state.tuplet = false; updateButtons(); drawOverlay(); });

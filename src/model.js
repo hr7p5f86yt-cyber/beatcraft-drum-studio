@@ -78,7 +78,7 @@ function fitDur(gap, tup) {
 function tsInfo(ts) { return TIME_SIGS[ts] || TIME_SIGS["4/4"]; }
 function newMeasure(ts) { return { ts: ts || "4/4", mark: "", up: [], down: [], dyn: [], hp: [], rs: false, re: false, sim: false, mr: false, dbl: false }; }
 function newScore() {
-  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", bpm: 120,
+  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", bpm: 120,
            measures: [newMeasure(), newMeasure(), newMeasure(), newMeasure()] };
 }
 function measureStarts(score) {
@@ -183,7 +183,8 @@ function decomposeGap(t, gap, beat) {
 
 /* ---- 連桁グループ ---- */
 /* events: fillRests の出力。拍の中で連続する旗付き音符を連桁でつなぐ。戻り値: [[event,...], ...] */
-function beamGroups(events, beat) {
+function beamGroups(events, beat, ticks) {
+  const wide = ticks && ticks % 96 === 0 && beat === 48;                 // 4/4・2/4: 8分音符は2拍ぶんまとめて連桁にする(ふつうの譜面の書き方)
   const groups = []; let cur = [];
   const flush = () => { if (cur.length >= 2) groups.push(cur); cur = []; };
   for (const e of events) {
@@ -193,7 +194,8 @@ function beamGroups(events, beat) {
       const last = cur[cur.length - 1];
       const adjacent = last.t + last.d === e.t;
       const sameBeat = Math.floor(last.t / beat) === Math.floor(e.t / beat);
-      const connect = e.bm === "break" ? false : e.bm === "join" ? true : sameBeat;     // 手動指定が優先
+      const sameHalf = wide && last.d >= 24 && e.d >= 24 && !last.tup && !e.tup && Math.floor(last.t / 96) === Math.floor(e.t / 96);
+      const connect = e.bm === "break" ? false : e.bm === "join" ? true : (sameBeat || sameHalf);     // 手動指定が優先
       if (!adjacent || !connect) flush();
     }
     cur.push(e);
@@ -242,7 +244,7 @@ function beamInfoAt(measure, t) {
     const cur = ev[k], prev = ev[k - 1];
     if (prev.rest || prev.t + prev.d !== cur.t) continue;
     if (durInfo(cur.d, cur.tup).flags < 1 || durInfo(prev.d, prev.tup).flags < 1) continue;
-    const connected = beamGroups(ev, info.beat).some(g => g.includes(cur) && g.includes(prev));
+    const connected = beamGroups(ev, info.beat, info.ticks).some(g => g.includes(cur) && g.includes(prev));
     out.push({ voice, cur: cur.ref, connected, sameBeat: Math.floor(prev.t / info.beat) === Math.floor(cur.t / info.beat) });
   }
   return out;
@@ -457,7 +459,7 @@ function migrateScore(raw) {
     if (!raw || typeof raw !== "object" || !Array.isArray(raw.measures) || raw.measures.length === 0)
       return { ok: false, error: "楽譜データの形式が正しくありません" };
     const ver = parseInt(String(raw.version || raw.schemaVersion || "0"), 10);
-    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80),
+    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80),
                   bpm: clampInt(raw.bpm, 40, 240, 120), measures: [] };
     for (const m of raw.measures) {
       const ts = TIME_SIGS[m.ts || m.timeSignature] ? (m.ts || m.timeSignature) : "4/4";

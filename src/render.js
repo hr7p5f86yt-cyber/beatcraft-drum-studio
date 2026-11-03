@@ -148,7 +148,7 @@ function measureNotesSvg(it, out) {
       e.info = durInfo(e.d, e.tup);
       e.end = dirUp ? e.top - L.STEM_LEN : e.bot + L.STEM_LEN;
     }
-    const groups = beamGroups(ev, it.beat), inBeam = new Set();
+    const groups = beamGroups(ev, it.beat, it.ticks), inBeam = new Set();
     groups.forEach(g => {
       const end = dirUp ? Math.min(...g.map(e => e.end)) : Math.max(...g.map(e => e.end));
       g.forEach(e => { e.end = end; inBeam.add(e); });
@@ -246,9 +246,8 @@ function buildScoreSvg(score, opt) {
   const serif = "'Times New Roman','Noto Serif JP','Hiragino Mincho ProN',serif";
   s += `<text x="${lay.width / 2}" y="46" font-family="${serif}" font-size="28" text-anchor="middle">${escapeHtml(score.title)}</text>`;
   s += `<text x="${L.MARGIN}" y="34" font-family="${serif}" font-size="15">Drum Kit</text>`;
-  s += `<ellipse cx="${L.MARGIN + 6}" cy="${L.TITLE_H - 16}" rx="4.6" ry="3.4" transform="rotate(-20 ${L.MARGIN + 6} ${L.TITLE_H - 16})" fill="#000"/>`
-     + `<line x1="${L.MARGIN + 10}" y1="${L.TITLE_H - 17}" x2="${L.MARGIN + 10}" y2="${L.TITLE_H - 36}" stroke="#000" stroke-width="1.3"/>`
-     + `<text x="${L.MARGIN + 18}" y="${L.TITLE_H - 15}" font-family="${serif}" font-weight="bold" font-size="15">= ${score.bpm}</text>`;
+  if (score.subtitle) s += `<text x="${lay.width / 2}" y="78" font-family="${serif}" font-size="22" text-anchor="middle">${escapeHtml(score.subtitle)}</text>`;
+  if (score.composer) s += `<text x="${lay.width - L.MARGIN}" y="68" font-family="${serif}" font-size="14" text-anchor="end">${escapeHtml(score.composer)}</text>`;
   let lastIdx = lay.measures.length - 1; while (lastIdx > 0 && lay.measures[lastIdx].hidden) lastIdx--;
   const hairpins = [], dynAt = {};                                  // 強弱記号は小節をまたぐので、全体tickで集めておく
   lay.measures.forEach(it => {
@@ -279,7 +278,15 @@ function buildScoreSvg(score, opt) {
     if (it.m.mark) s += `<rect x="${f(it.x0 + 4)}" y="${top - 66}" width="${12 + it.m.mark.length * 11}" height="19" fill="#fff" stroke="#000" stroke-width="1.5"/>`
       + `<text x="${f(it.x0 + 10 + it.m.mark.length * 5.5)}" y="${top - 51}" font-family="${serif}" font-weight="bold" font-size="15" text-anchor="middle">${escapeHtml(it.m.mark)}</text>`;
     s += repeatBarsSvg(it) + measureNotesSvg(it, out) + marksSvg(it, hairpins, dynAt);
-    s += `<text data-measure="${it.idx}" x="${f(it.x0 + 4)}" y="${top - 14}" font-family="sans-serif" font-size="10" fill="#64748b" style="cursor:pointer">${it.idx + 1}</text>`;
+    // テンポ記号は最初の小節の上(リハーサル記号があればその右)
+    if (it.idx === 0) {
+      const tx = it.x0 + 8 + (it.m.mark ? 12 + it.m.mark.length * 11 + 10 : 0), ty = top - 51;
+      s += `<ellipse cx="${f(tx + 4)}" cy="${ty - 1}" rx="4.6" ry="3.4" transform="rotate(-20 ${f(tx + 4)} ${ty - 1})" fill="#000"/><line x1="${f(tx + 8.3)}" y1="${ty - 2}" x2="${f(tx + 8.3)}" y2="${ty - 20}" stroke="#000" stroke-width="1.3"/>`
+         + `<text x="${f(tx + 15)}" y="${ty}" font-family="${serif}" font-weight="bold" font-size="15">= ${score.bpm}</text>`;
+    }
+    // 小節番号は、段の一番左の小節だけに表示する(最初の段の1小節目は省略)。タップで設定を開く当たり判定は全小節にある
+    s += `<rect data-measure="${it.idx}" x="${f(it.x0 + 1)}" y="${top - 22}" width="26" height="17" fill="#fff" fill-opacity="0" style="cursor:pointer"/>`;
+    if (it.first && it.idx > 0) s += `<text data-measure="${it.idx}" x="${f(it.x0 + 3)}" y="${top - 10}" font-family="${serif}" font-style="italic" font-size="13" fill="#000" style="cursor:pointer">${it.idx + 1}</text>`;
   });
   return { svg: s, width: lay.width, height: lay.height, layout: lay, heads: out.heads };
 }

@@ -81,13 +81,13 @@ let fail = 0; const ok = (c, msg) => { if (!c) { fail++; console.log("NG:", msg)
   // --- 連桁
   await p.evaluate(() => { state.score.measures.forEach(clearMeasureContent); commit(); state.cursor = { m: 0, t: 0 }; state.base = 24; updateButtons(); });
   for (let k = 0; k < 4; k++) await key("h");
-  const groups = () => p.evaluate(() => { const m = state.score.measures[0], i = tsInfo(m.ts); return beamGroups(fillRests(m.up, i.ticks, i.beat), i.beat).map(g => g.map(e => e.t).join("-")).join("|"); });
-  ok(await groups() === "0-24|48-72", "標準の連桁: 拍ごと");
+  const groups = () => p.evaluate(() => { const m = state.score.measures[0], i = tsInfo(m.ts); return beamGroups(fillRests(m.up, i.ticks, i.beat), i.beat, i.ticks).map(g => g.map(e => e.t).join("-")).join("|"); });
+  ok(await groups() === "0-24-48-72", "標準の連桁: 2拍ぶん");
   await p.evaluate(() => { state.cursor = { m: 0, t: 48 }; drawOverlay(); }); await key("b");
-  ok(await groups() === "0-24-48-72", "B: 拍をまたいでつなぐ");
+  ok(await groups() === "0-24|48-72", "B: 拍の間で切る");
   await p.evaluate(() => { state.cursor = { m: 0, t: 24 }; drawOverlay(); }); await key("b");
-  ok(await groups() === "24-48-72", "B: 切る → 先頭の音符は単独(旗)になる");
-  await key("Control+z"); ok(await groups() === "0-24-48-72", "Ctrl+Z で戻る");
+  ok(await groups() === "48-72", "B: さらに切る → 0と24は単独(旗)になる");
+  await key("Control+z"); ok(await groups() === "0-24|48-72", "Ctrl+Z で戻る");
 
   // --- フォーカスの二重作動がない: ボタンをクリックしてから Space
   await p.evaluate(() => { stopPlay(); }); await p.click("#loopBtn"); await p.click("#loopBtn");

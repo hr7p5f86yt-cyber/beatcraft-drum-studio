@@ -85,7 +85,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.5.0</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.6.0</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -152,6 +152,8 @@ body.has-dock .toast{bottom:200px}
   <div class="panel" id="scorePanel">
     <div class="row no-print">
       <input type="text" id="titleInput" maxlength="80" placeholder="曲名">
+      <input type="text" id="subtitleInput" maxlength="80" placeholder="副題・アーティスト(任意)" style="max-width:220px">
+      <input type="text" id="composerInput" maxlength="80" placeholder="作曲者など(任意)" style="max-width:200px">
       <div class="group">
         <button id="addMeasureBtn" class="small">＋ 小節を追加</button><button id="delMeasureBtn" class="small danger">－ 最後の小節を削除</button>
         <button id="svgBtn" class="ok small">SVG保存</button><button id="pngBtn" class="ok small">PNG保存</button><button id="printBtn" class="primary small">印刷 / PDF</button>
@@ -201,6 +203,7 @@ body.has-dock .toast{bottom:200px}
   <div class="help">ドラム譜(5線・ハイハットは×印)の画像、スキャン、写真、PDFを選びます。アプリ内の簡易読み取りなので、音符の長さは位置から推定します。取り込み後に手直しが必要です。</div>
   <div id="impDrop" class="dropzone"><label class="filebtn">ファイルを選ぶ(写真・画像・PDF)<input type="file" id="impFile" accept="image/*,application/pdf,.pdf" style="display:none"></label> <span id="impName" class="help">(画像をここへドロップ/貼り付けもできます)</span></div>
   <div class="group"><label class="opt">拍子 <select id="impTs"></select></label>
+    <label class="opt" id="impAllWrap" style="display:none"><input type="checkbox" id="impAll" checked>PDFの全ページをまとめて取り込む</label>
     <span id="impPage" style="display:none;align-items:center;gap:6px"><button id="impPrev" class="small">◀</button><span id="impPageInfo" class="help"></span><button id="impNext" class="small">▶</button></span></div>
   <div class="group"><label class="opt"><input type="radio" name="impMode" value="replace" checked>今の楽譜と置き換える</label><label class="opt"><input type="radio" name="impMode" value="append">今の楽譜の後ろに追加</label></div>
   <div id="impStatus" class="help"></div>
@@ -332,7 +335,7 @@ function fitDur(gap, tup) {
 function tsInfo(ts) { return TIME_SIGS[ts] || TIME_SIGS["4/4"]; }
 function newMeasure(ts) { return { ts: ts || "4/4", mark: "", up: [], down: [], dyn: [], hp: [], rs: false, re: false, sim: false, mr: false, dbl: false }; }
 function newScore() {
-  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", bpm: 120,
+  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", bpm: 120,
            measures: [newMeasure(), newMeasure(), newMeasure(), newMeasure()] };
 }
 function measureStarts(score) {
@@ -437,7 +440,8 @@ function decomposeGap(t, gap, beat) {
 
 /* ---- 連桁グループ ---- */
 /* events: fillRests の出力。拍の中で連続する旗付き音符を連桁でつなぐ。戻り値: [[event,...], ...] */
-function beamGroups(events, beat) {
+function beamGroups(events, beat, ticks) {
+  const wide = ticks && ticks % 96 === 0 && beat === 48;                 // 4/4・2/4: 8分音符は2拍ぶんまとめて連桁にする(ふつうの譜面の書き方)
   const groups = []; let cur = [];
   const flush = () => { if (cur.length >= 2) groups.push(cur); cur = []; };
   for (const e of events) {
@@ -447,7 +451,8 @@ function beamGroups(events, beat) {
       const last = cur[cur.length - 1];
       const adjacent = last.t + last.d === e.t;
       const sameBeat = Math.floor(last.t / beat) === Math.floor(e.t / beat);
-      const connect = e.bm === "break" ? false : e.bm === "join" ? true : sameBeat;     // 手動指定が優先
+      const sameHalf = wide && last.d >= 24 && e.d >= 24 && !last.tup && !e.tup && Math.floor(last.t / 96) === Math.floor(e.t / 96);
+      const connect = e.bm === "break" ? false : e.bm === "join" ? true : (sameBeat || sameHalf);     // 手動指定が優先
       if (!adjacent || !connect) flush();
     }
     cur.push(e);
@@ -496,7 +501,7 @@ function beamInfoAt(measure, t) {
     const cur = ev[k], prev = ev[k - 1];
     if (prev.rest || prev.t + prev.d !== cur.t) continue;
     if (durInfo(cur.d, cur.tup).flags < 1 || durInfo(prev.d, prev.tup).flags < 1) continue;
-    const connected = beamGroups(ev, info.beat).some(g => g.includes(cur) && g.includes(prev));
+    const connected = beamGroups(ev, info.beat, info.ticks).some(g => g.includes(cur) && g.includes(prev));
     out.push({ voice, cur: cur.ref, connected, sameBeat: Math.floor(prev.t / info.beat) === Math.floor(cur.t / info.beat) });
   }
   return out;
@@ -711,7 +716,7 @@ function migrateScore(raw) {
     if (!raw || typeof raw !== "object" || !Array.isArray(raw.measures) || raw.measures.length === 0)
       return { ok: false, error: "楽譜データの形式が正しくありません" };
     const ver = parseInt(String(raw.version || raw.schemaVersion || "0"), 10);
-    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80),
+    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80),
                   bpm: clampInt(raw.bpm, 40, 240, 120), measures: [] };
     for (const m of raw.measures) {
       const ts = TIME_SIGS[m.ts || m.timeSignature] ? (m.ts || m.timeSignature) : "4/4";
@@ -1064,7 +1069,7 @@ function measureNotesSvg(it, out) {
       e.info = durInfo(e.d, e.tup);
       e.end = dirUp ? e.top - L.STEM_LEN : e.bot + L.STEM_LEN;
     }
-    const groups = beamGroups(ev, it.beat), inBeam = new Set();
+    const groups = beamGroups(ev, it.beat, it.ticks), inBeam = new Set();
     groups.forEach(g => {
       const end = dirUp ? Math.min(...g.map(e => e.end)) : Math.max(...g.map(e => e.end));
       g.forEach(e => { e.end = end; inBeam.add(e); });
@@ -1162,9 +1167,8 @@ function buildScoreSvg(score, opt) {
   const serif = "'Times New Roman','Noto Serif JP','Hiragino Mincho ProN',serif";
   s += `<text x="${lay.width / 2}" y="46" font-family="${serif}" font-size="28" text-anchor="middle">${escapeHtml(score.title)}</text>`;
   s += `<text x="${L.MARGIN}" y="34" font-family="${serif}" font-size="15">Drum Kit</text>`;
-  s += `<ellipse cx="${L.MARGIN + 6}" cy="${L.TITLE_H - 16}" rx="4.6" ry="3.4" transform="rotate(-20 ${L.MARGIN + 6} ${L.TITLE_H - 16})" fill="#000"/>`
-     + `<line x1="${L.MARGIN + 10}" y1="${L.TITLE_H - 17}" x2="${L.MARGIN + 10}" y2="${L.TITLE_H - 36}" stroke="#000" stroke-width="1.3"/>`
-     + `<text x="${L.MARGIN + 18}" y="${L.TITLE_H - 15}" font-family="${serif}" font-weight="bold" font-size="15">= ${score.bpm}</text>`;
+  if (score.subtitle) s += `<text x="${lay.width / 2}" y="78" font-family="${serif}" font-size="22" text-anchor="middle">${escapeHtml(score.subtitle)}</text>`;
+  if (score.composer) s += `<text x="${lay.width - L.MARGIN}" y="68" font-family="${serif}" font-size="14" text-anchor="end">${escapeHtml(score.composer)}</text>`;
   let lastIdx = lay.measures.length - 1; while (lastIdx > 0 && lay.measures[lastIdx].hidden) lastIdx--;
   const hairpins = [], dynAt = {};                                  // 強弱記号は小節をまたぐので、全体tickで集めておく
   lay.measures.forEach(it => {
@@ -1195,7 +1199,15 @@ function buildScoreSvg(score, opt) {
     if (it.m.mark) s += `<rect x="${f(it.x0 + 4)}" y="${top - 66}" width="${12 + it.m.mark.length * 11}" height="19" fill="#fff" stroke="#000" stroke-width="1.5"/>`
       + `<text x="${f(it.x0 + 10 + it.m.mark.length * 5.5)}" y="${top - 51}" font-family="${serif}" font-weight="bold" font-size="15" text-anchor="middle">${escapeHtml(it.m.mark)}</text>`;
     s += repeatBarsSvg(it) + measureNotesSvg(it, out) + marksSvg(it, hairpins, dynAt);
-    s += `<text data-measure="${it.idx}" x="${f(it.x0 + 4)}" y="${top - 14}" font-family="sans-serif" font-size="10" fill="#64748b" style="cursor:pointer">${it.idx + 1}</text>`;
+    // テンポ記号は最初の小節の上(リハーサル記号があればその右)
+    if (it.idx === 0) {
+      const tx = it.x0 + 8 + (it.m.mark ? 12 + it.m.mark.length * 11 + 10 : 0), ty = top - 51;
+      s += `<ellipse cx="${f(tx + 4)}" cy="${ty - 1}" rx="4.6" ry="3.4" transform="rotate(-20 ${f(tx + 4)} ${ty - 1})" fill="#000"/><line x1="${f(tx + 8.3)}" y1="${ty - 2}" x2="${f(tx + 8.3)}" y2="${ty - 20}" stroke="#000" stroke-width="1.3"/>`
+         + `<text x="${f(tx + 15)}" y="${ty}" font-family="${serif}" font-weight="bold" font-size="15">= ${score.bpm}</text>`;
+    }
+    // 小節番号は、段の一番左の小節だけに表示する(最初の段の1小節目は省略)。タップで設定を開く当たり判定は全小節にある
+    s += `<rect data-measure="${it.idx}" x="${f(it.x0 + 1)}" y="${top - 22}" width="26" height="17" fill="#fff" fill-opacity="0" style="cursor:pointer"/>`;
+    if (it.first && it.idx > 0) s += `<text data-measure="${it.idx}" x="${f(it.x0 + 3)}" y="${top - 10}" font-family="${serif}" font-style="italic" font-size="13" fill="#000" style="cursor:pointer">${it.idx + 1}</text>`;
   });
   return { svg: s, width: lay.width, height: lay.height, layout: lay, heads: out.heads };
 }
@@ -2092,7 +2104,7 @@ function snapOf(cd) { return cd.tup ? cd.d : Math.min(12, cd.d); }
 function renderAll() {
   const r = buildScoreSvg(state.score); state.view = r;
   $("scoreHost").innerHTML = `<svg id="scoreSvg" viewBox="0 0 ${r.width} ${r.height}" xmlns="http://www.w3.org/2000/svg">${r.svg}<g id="overlay" pointer-events="none"></g><line id="playhead" x1="0" y1="0" x2="0" y2="0" stroke="#2563eb" stroke-width="2" opacity="0.65" visibility="hidden"/></svg>`;
-  $("titleInput").value = state.score.title;
+  $("titleInput").value = state.score.title; $("subtitleInput").value = state.score.subtitle || ""; $("composerInput").value = state.score.composer || "";
   $("bpmVal").textContent = state.score.bpm; $("bpmRange").value = state.score.bpm;
   if (typeof applyZoom === "function") applyZoom();
   updateButtons(); drawOverlay();
@@ -2617,7 +2629,7 @@ function openHelp() { $("helpModal").classList.add("show"); }
 /* ===== ui_import.js : 画像・PDF・写真から楽譜を取り込む画面 =====
  * 画像(PNG/JPEG/写真)はそのまま、PDFは pdf.js(必要になった時だけ cdnjs から読み込む)で1ページを画像にして、
  * omr.js で読み取る。結果は「検出した位置」を元画像に重ねて確認してから、楽譜に取り込む。 */
-const IMP = { res: null, ts: "4/4", file: null, pdf: null, page: 1, busy: false, lastCanvas: null };
+const IMP = { results: [], res: null, ts: "4/4", file: null, pdf: null, page: 1, busy: false, lastCanvas: null };
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const OMR_COLORS = { crash: "#f59e0b", hh_close: "#2563eb", hh_open: "#06b6d4", ride: "#8b5cf6", hi_tom: "#ec4899", snare: "#10b981", low_tom: "#f97316", kick: "#ef4444" };
@@ -2679,8 +2691,8 @@ function recognizeCanvas(c, ts) {
 }
 
 /* 検出結果を元画像に重ねて表示 */
-function drawPreview(res) {
-  const box = $("impPreview"); box.textContent = "";
+function drawPreview(res, label, keep) {
+  const box = $("impPreview"); if (!keep) box.textContent = "";
   const full = document.createElement("canvas"); full.width = res.w; full.height = res.h;
   const g = full.getContext("2d"), im = g.createImageData(res.w, res.h);
   for (let i = 0; i < res.w * res.h; i++) { const v = res.gray[i]; im.data[4 * i] = im.data[4 * i + 1] = im.data[4 * i + 2] = v; im.data[4 * i + 3] = 255; }
@@ -2693,34 +2705,43 @@ function drawPreview(res) {
     const y0 = Math.max(0, Math.round(sy.st.lines[0] - res.S * 5.5)), y1 = Math.min(res.h, Math.round(sy.st.lines[4] + res.S * 5)), x0 = Math.max(0, Math.round(sy.st.left - 10)), x1 = Math.min(res.w, Math.round(sy.st.right + 10));
     const c = document.createElement("canvas"); c.width = x1 - x0; c.height = y1 - y0; c.getContext("2d").drawImage(full, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
     c.style.cssText = "width:100%;height:auto;display:block;background:#fff;border-radius:4px";
-    const cap = document.createElement("div"); cap.className = "help"; cap.textContent = `${i + 1}段目`;
+    const cap = document.createElement("div"); cap.className = "help"; cap.textContent = `${label || ""}${i + 1}段目`;
     box.append(cap, c);
   });
 }
 
 async function runImport() {
-  if (IMP.busy || !IMP.file) return; IMP.busy = true; $("impApply").disabled = true; $("impPreview").textContent = "";
+  if (IMP.busy || !IMP.file) return; IMP.busy = true; $("impApply").disabled = true; $("impPreview").textContent = ""; IMP.results = []; IMP.res = null;
   try {
     impStatus("読み取り中…(数秒かかります)");
     await new Promise(r => setTimeout(r, 30));
-    const c = await fileToCanvas(IMP.file, IMP.page);
-    $("impPage").style.display = IMP.pdf ? "flex" : "none";
-    if (IMP.pdf) $("impPageInfo").textContent = `${IMP.page} / ${IMP.pdf.numPages} ページ`;
-    await new Promise(r => setTimeout(r, 30));
-    const res = recognizeCanvas(c, IMP.ts);
-    if (!res.ok) { IMP.res = null; impStatus(res.error, true); return; }
-    IMP.res = res;
-    const n = omrCount(res);
-    if (!n) { impStatus("五線は見つかりましたが、音符を検出できませんでした。明るく、まっすぐ、大きく撮影してお試しください。", true); drawPreview(res); return; }
-    impStatus(`${res.systems.length}段・${res.measures.length}小節・${n}個の音符を検出しました(傾き補正 ${res.skew.toFixed(1)}°)。下の画像で、色つきの四角が検出位置です。取り込み後に手直ししてください。`);
-    drawPreview(res); $("impApply").disabled = false;
-  } catch (e) { IMP.res = null; impStatus("読み取りに失敗しました: " + e.message, true); console.error(e); }
+    let c = await fileToCanvas(IMP.file, IMP.page);
+    const isPdf = !!IMP.pdf, all = isPdf && $("impAll").checked, total = isPdf ? IMP.pdf.numPages : 1;
+    $("impAllWrap").style.display = isPdf ? "inline-flex" : "none"; $("impPage").style.display = isPdf && !all ? "flex" : "none";
+    if (isPdf && !all) $("impPageInfo").textContent = `${IMP.page} / ${total} ページ`;
+    const pages = all ? Array.from({ length: total }, (_, i) => i + 1) : [IMP.page]; let ts = IMP.ts, skipped = [];
+    for (let k = 0; k < pages.length; k++) {
+      const pn = pages[k];
+      if (all) { impStatus(`読み取り中… ${pn} / ${total} ページ`); await new Promise(r => setTimeout(r, 30)); if (k > 0 || pn !== IMP.page) c = await fileToCanvas(IMP.file, pn); }
+      const res = recognizeCanvas(c, ts); c = null;
+      if (!res.ok || !omrCount(res)) { skipped.push(pn); if (!all) { impStatus(res.ok ? "五線は見つかりましたが、音符を検出できませんでした。明るく、まっすぐ、大きく撮影してお試しください。" : res.error, true); if (res.ok) drawPreview(res); } continue; }
+      drawPreview(res, all ? `${pn}ページ ` : "", IMP.results.length > 0);
+      res.gray = null; IMP.results.push({ page: pn, res });
+      const last = res.measures[res.measures.length - 1]; if (last && last.ts) ts = last.ts;     // 次のページへ拍子を引き継ぐ
+    }
+    if (!IMP.results.length) { if (all) impStatus("どのページからも楽譜を検出できませんでした。", true); return; }
+    IMP.res = IMP.results[0].res;
+    const nm = IMP.results.reduce((a, r) => a + r.res.measures.reduce((x, m) => x + (m.mrN >= 2 ? m.mrN : 1), 0), 0), nn = IMP.results.reduce((a, r) => a + omrCount(r.res), 0);
+    const r0 = IMP.results[0].res;
+    impStatus(`${all ? IMP.results.length + "ページ・" : ""}${r0.systems.length}段${all ? "(最初のページ)" : ""}・${nm}小節・${nn}個の音符を検出しました${all ? "" : "(傾き補正 " + r0.skew.toFixed(1) + "°)"}${r0.bpm ? "・テンポ" + r0.bpm : ""}。${skipped.length ? "楽譜が見つからなかったページ: " + skipped.join(",") + "。" : ""}下の画像で、色つきの四角が検出位置です。取り込み後に手直ししてください。`);
+    $("impApply").disabled = false;
+  } catch (e) { IMP.res = null; IMP.results = []; impStatus("読み取りに失敗しました: " + e.message, true); console.error(e); }
   finally { IMP.busy = false; }
 }
 
 function applyImport() {
-  if (!IMP.res) return;
-  const ms = omrToMeasures(IMP.res, IMP.ts); if (!ms.length) { impStatus("取り込める小節がありません", true); return; }
+  if (!IMP.results || !IMP.results.length) return;
+  const ms = []; IMP.results.forEach(r => ms.push(...omrToMeasures(r.res, IMP.ts))); if (!ms.length) { impStatus("取り込める小節がありません", true); return; }
   const mode = document.querySelector('input[name="impMode"]:checked').value;
   Player.stop(); hidePlayhead();
   if (mode === "replace") state.score.measures = ms; else state.score.measures.push(...ms);
@@ -2734,6 +2755,7 @@ function bindImport() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("importBtn", "click", openImport);
   on("impFile", "change", e => { const f = e.target.files && e.target.files[0]; if (!f) return; IMP.file = f; IMP.page = 1; IMP.pdf = null; $("impName").textContent = f.name; runImport(); e.target.value = ""; });
+  on("impAll", "change", () => { if (IMP.file) runImport(); });
   on("impTs", "change", e => { IMP.ts = e.target.value; if (IMP.file) runImport(); });
   on("impPrev", "click", () => { if (IMP.page > 1) { IMP.page--; runImport(); } });
   on("impNext", "click", () => { if (IMP.pdf && IMP.page < IMP.pdf.numPages) { IMP.page++; runImport(); } });
@@ -2948,6 +2970,8 @@ function bindEvents() {
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
   on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("voiceBtn", "click", cycleVoice);
   on("bpmRange", "input", e => changeBpm(e.target.value));
+  on("subtitleInput", "change", e => { state.score.subtitle = e.target.value.trim().slice(0, 80); commit(); });
+  on("composerInput", "change", e => { state.score.composer = e.target.value.trim().slice(0, 80); commit(); });
   on("titleInput", "change", e => { state.score.title = e.target.value.trim().slice(0, 80) || "マイ・ドラム・スコア"; commit(); });
   document.querySelectorAll("[data-base]").forEach(b => b.addEventListener("click", () => setBase(+b.dataset.base)));
   on("dotBtn", "click", () => { state.dotted = !state.dotted; if (state.dotted) state.tuplet = false; updateButtons(); drawOverlay(); });

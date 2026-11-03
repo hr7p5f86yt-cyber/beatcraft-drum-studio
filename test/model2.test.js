@@ -24,18 +24,18 @@ ok(m.up.find(n => n.t === 16).i.includes("snare") && m.up.find(n => n.t === 16).
 // 連桁の切断・接続
 s = newScore(); m = s.measures[0]; [0, 24, 48, 72].forEach(t => toggleNote(m, "hh_close", t, 24, false));
 const info = tsInfo("4/4");
-const groupsOf = () => beamGroups(fillRests(m.up, info.ticks, info.beat), info.beat).map(g => g.map(e => e.t).join("-"));
-ok(groupsOf().join("|") === "0-24|48-72", "標準: 拍ごとに連桁");
-toggleBeamAt(m, 48); ok(m.up.find(n => n.t === 48).bm === "join" && groupsOf().join("|") === "0-24-48-72", "拍をまたいでつなげる(join)");
-toggleBeamAt(m, 48); ok(m.up.find(n => n.t === 48).bm === "break" && groupsOf().join("|") === "0-24|48-72", "もう一度で切る(break)");
+const groupsOf = () => beamGroups(fillRests(m.up, info.ticks, info.beat), info.beat, info.ticks).map(g => g.map(e => e.t).join("-"));
+ok(groupsOf().join("|") === "0-24-48-72", "標準: 4/4の8分は2拍ぶんまとめて連桁");
+toggleBeamAt(m, 48); ok(m.up.find(n => n.t === 48).bm === "break" && groupsOf().join("|") === "0-24|48-72", "拍の間で切る(break)");
+toggleBeamAt(m, 48); ok(m.up.find(n => n.t === 48).bm === "join" && groupsOf().join("|") === "0-24-48-72", "もう一度でつなぐ(join)");
 toggleBeamAt(m, 24); ok(m.up.find(n => n.t === 24).bm === "break" && groupsOf().join("|") === "0|24|48-72".replace("0|24|", "0|24|") || true, "拍内の連桁も切れる");
 console.log("  拍内break後:", groupsOf().join("|"));
-ok(groupsOf().join("|") === "48-72", "0と24は単独(旗つき)になる");
-toggleBeamAt(m, 24); ok(m.up.find(n => n.t === 24).bm === undefined && groupsOf().join("|") === "0-24|48-72", "拍内で切ったものは、もう一度で標準に戻る");
+ok(groupsOf().join("|") === "24-48-72", "0は単独(旗つき)になる");
+toggleBeamAt(m, 24); ok(m.up.find(n => n.t === 24).bm === undefined && groupsOf().join("|") === "0-24-48-72", "切ったものは、もう一度で標準に戻る");
 // 変更は音符の保存・読込でも残る
 toggleBeamAt(m, 48); s.measures[0].up[0].acc = true;
 const back = migrateScore(JSON.parse(JSON.stringify(s)));
-ok(back.ok && back.score.measures[0].up.find(n => n.t === 48).bm === "join" && back.score.measures[0].up[0].acc === true, "連桁指定とアクセントが保存→読込で残る");
+ok(back.ok && back.score.measures[0].up.find(n => n.t === 48).bm === "break" && back.score.measures[0].up[0].acc === true, "連桁指定とアクセントが保存→読込で残る");
 
 // アクセント/ゴースト
 s = newScore(); m = s.measures[0]; [0, 24].forEach(t => toggleNote(m, "snare", t, 24, false));

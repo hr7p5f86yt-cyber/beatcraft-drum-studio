@@ -85,7 +85,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.5.0</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.6.0</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -152,6 +152,8 @@ body.has-dock .toast{bottom:200px}
   <div class="panel" id="scorePanel">
     <div class="row no-print">
       <input type="text" id="titleInput" maxlength="80" placeholder="曲名">
+      <input type="text" id="subtitleInput" maxlength="80" placeholder="副題・アーティスト(任意)" style="max-width:220px">
+      <input type="text" id="composerInput" maxlength="80" placeholder="作曲者など(任意)" style="max-width:200px">
       <div class="group">
         <button id="addMeasureBtn" class="small">＋ 小節を追加</button><button id="delMeasureBtn" class="small danger">－ 最後の小節を削除</button>
         <button id="svgBtn" class="ok small">SVG保存</button><button id="pngBtn" class="ok small">PNG保存</button><button id="printBtn" class="primary small">印刷 / PDF</button>
@@ -201,6 +203,7 @@ body.has-dock .toast{bottom:200px}
   <div class="help">ドラム譜(5線・ハイハットは×印)の画像、スキャン、写真、PDFを選びます。アプリ内の簡易読み取りなので、音符の長さは位置から推定します。取り込み後に手直しが必要です。</div>
   <div id="impDrop" class="dropzone"><label class="filebtn">ファイルを選ぶ(写真・画像・PDF)<input type="file" id="impFile" accept="image/*,application/pdf,.pdf" style="display:none"></label> <span id="impName" class="help">(画像をここへドロップ/貼り付けもできます)</span></div>
   <div class="group"><label class="opt">拍子 <select id="impTs"></select></label>
+    <label class="opt" id="impAllWrap" style="display:none"><input type="checkbox" id="impAll" checked>PDFの全ページをまとめて取り込む</label>
     <span id="impPage" style="display:none;align-items:center;gap:6px"><button id="impPrev" class="small">◀</button><span id="impPageInfo" class="help"></span><button id="impNext" class="small">▶</button></span></div>
   <div class="group"><label class="opt"><input type="radio" name="impMode" value="replace" checked>今の楽譜と置き換える</label><label class="opt"><input type="radio" name="impMode" value="append">今の楽譜の後ろに追加</label></div>
   <div id="impStatus" class="help"></div>
