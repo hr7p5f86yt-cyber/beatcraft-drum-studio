@@ -371,7 +371,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
     const hole = hasHole(c);
     if (hole && bw <= 0.85 && bh <= 0.85 && bw >= 0.3) { rings.push({ cx, cy }); continue; }   // ハイハットのオープン記号 ○
     if (inZone(rx0 + c.maxx)) continue;                                        // 音部記号・拍子記号
-    if (hole && bw >= 0.65 && bw <= 1.8 && bh >= 0.55 && bh <= 1.3 && hasStem(c)) heads.push({ x: cx, y: cy, kind: "oval" });     // 白い符頭(2分音符など)
+    if (hole && bw >= 0.65 && bw <= 1.8 && bh >= 0.55 && bh <= 1.3 && ((ry0 + (c.miny + c.maxy) / 2 - y0) / (S / 2)) >= 0.3 && hasStem(c)) heads.push({ x: cx, y: cy, kind: "oval" });     // 白い符頭(2分音符など)
   }
   // ×印の符頭(ハイハット・シンバル): 2本の斜めの線が交わる形を探す。×が隣とくっついていても見つけられる
   {
@@ -447,12 +447,24 @@ function omrAnalyzeStaff(bin, w, h, st) {
     if (hd.kind === "oval" && hd.h > 6) hd.inst = "kick";
     if (hd.kind === "cross" && hd.inst === "hh_close" && (hd.ring || rings.some(r => Math.abs(r.cx - hd.x) < 0.9 * S && r.cy < hd.y && hd.y - r.cy < 2 * S))) hd.inst = "hh_open";
   });
+  // (8) 付点: 符頭の右どなりにある小さな黒い点(まわりに他の黒がない)
+  {
+    const r = Math.max(1, Math.floor(0.09 * S)), solidDot = (px, py) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + 1 && !inkB(px + dx, py + dy)) return false; return true; };
+    const ringClear = (px, py) => { let n = 0, t = 0; for (let a = 0; a < 16; a++) { t++; if (inkB(Math.round(px + (r + 2) * Math.cos(a * Math.PI / 8)), Math.round(py + (r + 2) * Math.sin(a * Math.PI / 8)))) n++; } return n <= 1; };
+    heads.forEach(hd => {
+      const hw = hd.kind === "cross" ? 0.45 * S : 0.6 * S; let found = false;
+      for (let dy = -0.7 * S; dy <= 0.35 * S && !found; dy += 1) for (let dx = hw + 0.25 * S; dx <= hw + 1.0 * S && !found; dx += 1) {
+        const px = Math.round(hd.x + dx), py = Math.round(hd.y + dy); if (solidDot(px, py) && ringClear(px, py)) found = true;
+      }
+      if (found) hd.dot = true;
+    });
+  }
   return { st, barX, heads, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
 /* xs: 小さい順の音符の横位置。c: 小節の左端(基準)。W: 小節の幅。T: 小節のtick数。padL: 左の余白の目安 */
-function omrQuantize(xs, c, W, T, S, padL, first) {
+function omrQuantizeLin(xs, c, W, T, S, padL, first) {
   const n = xs.length; if (!n) return [];
   const X0e = c + padL, k0 = Math.max(0.0001, (W - padL - 0.6 * S) / T);
   const grids = [{ g: 24, tup: false, pen: 0 }, { g: 12, tup: false, pen: 0.05 }, { g: 16, tup: true, pen: 0.07 }, { g: 6, tup: false, pen: 0.14 }, { g: 8, tup: true, pen: 0.16 }];
@@ -475,12 +487,67 @@ function omrQuantize(xs, c, W, T, S, padL, first) {
     }
     pick[b] = bg.gr;
   });
-  return tfs.map(o => {
+  const res = tfs.map(o => {
     const gr = pick[o.beat], p = o.tf - o.beat * 48; let q = Math.round(p / gr.g) * gr.g;
     if (q >= 48) return { t: Math.max(0, Math.min(T - 6, (o.beat + 1) * 48)), tup: false };        // 次の拍の頭に丸められた
     if (q < 0) q = 0;
     return { t: Math.max(0, Math.min(T - 6, o.beat * 48 + q)), tup: gr.tup };
   });
+  let rs = 0; res.forEach((r, i) => { rs += Math.abs(xs[i] - best.X0 - best.k * r.t); });       // 当てはめの残り(px): 音符の間隔が音価に比例しない楽譜との比較用
+  res.resid = rs / S; return res;
+}
+
+/* 音符の間隔が音価に比例しない楽譜(4分の間隔 > 8分の間隔×2 など)用: 隣どうしの間隔 ≒ G×(音価/4分)^p として、tick を動的計画法で決める */
+function omrQuantizeDP(xs, T, S, xr, dots, x0) {
+  const n = xs.length; if (n < 3) return null;
+  const st = [], pen = []; for (let t = 0; t < T; t += 2) {
+    let pn = -1; if (t % 24 === 0) pn = 0; else if (t % 12 === 0) pn = 0.05; else if (t % 16 === 0) pn = 0.07; else if (t % 6 === 0) pn = 0.14; else if (t % 8 === 0) pn = 0.16;
+    if (pn >= 0) { st.push(t); pen.push(pn); }
+  }
+  const m = st.length, isTup = t => t % 8 === 0 && t % 6 !== 0, isStr = t => t % 6 === 0 && t % 8 !== 0;
+  let best = null;
+  for (const p of [1, 0.85, 0.7, 0.6, 0.5]) for (let G = 2.4 * S; G <= 7.2 * S; G += 0.3 * S) {
+    const gap = new Float64Array(T + 1); for (let d = 1; d <= T; d++) gap[d] = G * Math.pow(d / 48, p);
+    let prev = new Float64Array(m), bp = []; for (let a = 0; a < m; a++) prev[a] = pen[a] + (x0 === undefined ? 0.35 * st[a] / 24 : Math.abs((xs[0] - x0) - (st[a] > 0 ? gap[st[a]] : 0)) / S * 0.5 + 0.03 * st[a] / 24);   // 頭の余白が広いぶんは、小節の頭の休符として数える
+    for (let i = 1; i < n; i++) {
+      const cur = new Float64Array(m).fill(1e9), bk = new Int16Array(m).fill(-1), dx = xs[i] - xs[i - 1];
+      for (let a = 0; a < m; a++) { if (prev[a] >= 1e9) continue; for (let b = a + 1; b < m; b++) {
+        const d = st[b] - st[a]; if (d < 6) continue; const dd = d === 18 || d === 36 || d === 72 || d === 144, dt0 = dots && dots[i - 1] ? (dd ? -0.15 : 0.35) : (dd ? 0.25 : 0); const e = Math.abs(dx - gap[d]) / S * 0.5 + pen[b] + dt0, v = prev[a] + e;
+        if (v < cur[b]) { cur[b] = v; bk[b] = a; } } }
+      bp.push(bk); prev = cur;
+    }
+    let bi = -1, bv = 1e9; for (let a = 0; a < m; a++) { if (st[a] > T - 6) continue; const v = prev[a] + Math.abs((xr - xs[n - 1]) - (gap[T - st[a]] - 0.5 * S)) / S * 0.5; if (v < bv) { bv = v; bi = a; } }   // 最後の音から小節線までの間隔も音価に合わせる
+    if (bi < 0) continue; bv += 0.08 * Math.abs(1 - p) * n;
+    if (!best || bv < best.cost) { const seq = [bi]; for (let i = n - 2; i >= 0; i--) seq.unshift(bp[i][seq[0]]); best = { cost: bv, seq: seq.map(a => st[a]) }; }
+  }
+  if (!best) return null;
+  const ts = best.seq; for (let i = 0; i < n; i++) { const b = Math.floor(ts[i] / 48); if (ts.some((u, j) => Math.floor(u / 48) === b && ((isTup(ts[i]) && isStr(u)) || (isStr(ts[i]) && isTup(u))))) return null; }   // 同じ拍に3連符と2分割が混ざる解は使わない
+  return { res: ts.map(t => ({ t, tup: isTup(t) })), cost: best.cost };
+}
+
+function omrQuantize(xs, c, W, T, S, padL, first, dots) {
+  const lin = omrQuantizeLin(xs, c, W, T, S, padL, first); if (!lin.length) return lin;
+  const linTup = lin.some(r => r.tup), n = lin.length, anyDot = dots && dots.some(Boolean), isD = d => d === 18 || d === 36 || d === 72 || d === 144;
+  if (anyDot) {                                                                         // 付点が見つかった小節: 付点のある音の次までの長さが付点音価になる解を選ぶ
+    const agree = r => r.reduce((a, q, i) => a + (i + 1 < r.length && dots[i] && isD(r[i + 1].t - q.t) ? 1 : 0) - (i + 1 < r.length && !dots[i] && isD(r[i + 1].t - q.t) ? 1 : 0), 0);
+    const dpd = omrQuantizeDP(xs, T, S, c + W, dots, first ? undefined : c + padL);
+    if (dpd && !dpd.res.some(r => r.tup) && dpd.cost / n < 0.3 && agree(dpd.res) > agree(lin)) return dpd.res;
+  }
+  const undotted = r => r.reduce((a, q, i) => a + (i + 1 < r.length && !(dots && dots[i]) && isD(r[i + 1].t - q.t) ? 1 : 0), 0);
+  if (!linTup && undotted(lin) > 0) {                                                    // 付点がないのに付点の長さになる読みは、間隔が音価に比例しないだけのことが多い
+    const dpu = omrQuantizeDP(xs, T, S, c + W, dots || xs.map(() => false), first ? undefined : c + padL);
+    if (dpu && !dpu.res.some(r => r.tup) && dpu.cost / n < 0.2 && undotted(dpu.res) < undotted(lin)) return dpu.res;
+  }
+  if (!linTup && lin.resid / n < 0.35 && lin[0].t === 0) return lin;                                       // 十分合っているときは今まで通り
+  const dp = omrQuantizeDP(xs, T, S, c + W, undefined, first ? undefined : c + padL); if (!dp) return lin;
+  const dpTup = dp.res.some(r => r.tup);
+  if (linTup) {
+    const cnt = {}; lin.forEach(r => { if (r.tup) { const b = Math.floor(r.t / 48); cnt[b] = (cnt[b] || 0) + 1; } });
+    if (Object.values(cnt).some(v => v >= 3)) return lin;                                // 1拍に3つ以上そろった本物の3連符
+    return !dpTup && dp.cost / n < 0.15 ? dp.res : lin;
+  }                        // 3連符に見えても、間隔が音価に比例しないだけの場合は2分割として読む
+  if (lin.resid / n < 0.35) return dp.cost / n < 0.2 && !dpTup && dp.res[0].t === 0 ? dp.res : lin;     // 小節の頭に音がないと読んだときだけ見直す
+  return !dpTup && dp.cost / n < 0.2 && dp.cost < lin.resid * 0.25 ? dp.res : lin;
 }
 
 /* ---- 全体 ---- */
@@ -521,7 +588,7 @@ function omrRecognize(g0, w, h, opt) {
       const hs = mr ? [] : sy.heads.filter(q => q.x > c && q.x < xr).sort((a, b) => a.x - b.x);
       const onsets = [];                                           // 近い x を同じ拍(和音)にまとめる
       hs.forEach(q => { const l = onsets[onsets.length - 1]; if (l && q.x - l.x <= 0.6 * S) { l.heads.push(q); l.x = (l.x * (l.heads.length - 1) + q.x) / l.heads.length; } else onsets.push({ x: q.x, heads: [q] }); });
-      const qs = omrQuantize(onsets.map(o => o.x), c, W, T, S, padL, m === 0 || !!zoneEndM);
+      const qs = omrQuantize(onsets.map(o => o.x), c, W, T, S, padL, m === 0 || !!zoneEndM, onsets.map(o => o.heads.some(q => q.dot)));
       const slots = [];
       onsets.forEach((o, i) => { const q = qs[i], l = slots[slots.length - 1]; if (l && l.t === q.t) l.heads.push(...o.heads); else slots.push({ t: q.t, tup: q.tup, heads: o.heads.slice() }); });
       slots.forEach(sl => { const seen = new Set(); sl.heads = sl.heads.filter(h => !seen.has(h.inst) && seen.add(h.inst)); });
