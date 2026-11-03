@@ -582,8 +582,9 @@ function omrRecognize(g0, w, h, opt) {
     });
     for (let m = 0; m + 1 < sy.barX.length; m++) {
       const xl = sy.barX[m], xr = sy.barX[m + 1]; if (xr - xl < 2.5 * S) continue;
-      if (sy.tsRead[m]) { tsCur = sy.tsRead[m]; if (!tsFound) tsFound = tsCur; }
-      const T = tsInfo(tsCur).ticks, zoneEndM = m === 0 ? clefEnd : (sy.zonesAt[m] || 0);
+      const spurious = m > 0 && !!sy.zonesAt[m] && (sy.tsRead[m] === tsCur || (!sy.tsRead[m] && sy.zonesAt[m] - sy.barX[m] < 2.3 * S));   // 同じ拍子が出てきた/読めない狭いかたまり = 休符などを拍子記号と見間違えた
+      if (sy.tsRead[m] && !spurious) { tsCur = sy.tsRead[m]; if (!tsFound) tsFound = tsCur; }
+      const T = tsInfo(tsCur).ticks, zoneEndM = m === 0 ? clefEnd : (sy.zonesAt[m] && !spurious ? sy.zonesAt[m] : 0);
       const c = Math.max(m === 0 ? clefEnd : xl, zoneEndM), W = xr - c, mr = sy.mrests[m];
       const hs = mr ? [] : sy.heads.filter(q => q.x > c && q.x < xr).sort((a, b) => a.x - b.x);
       const onsets = [];                                           // 近い x を同じ拍(和音)にまとめる

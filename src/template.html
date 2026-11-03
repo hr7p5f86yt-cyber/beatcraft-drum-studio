@@ -88,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.9.0</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.9.1</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -218,7 +218,7 @@ body.has-dock .toast{bottom:200px}
 
 <div class="modal-bg" id="sampleModal"><div class="modal wide">
   <h3>録音した音(サンプル)を使う</h3>
-  <div class="help">ハイハットやシンバルなど、録音されたドラムの音ファイル(wav / mp3 / m4a / ogg)を選ぶと、合成音の代わりに使います。再配布してよいライセンス(CC0など)の音源を使ってください。同じパーツに複数のファイルを選ぶと、音の大きい順に「弱い→強い」として、演奏の強さに合わせて使い分けます。</div>
+  <div class="help">ハイハットやシンバルなど、録音されたドラムの音ファイル(wav / flac / mp3 / m4a / ogg)を選ぶと、合成音の代わりに使います。再配布してよいライセンス(CC0など)の音源を使ってください。同じパーツに複数のファイルを選ぶと、音の大きい順に「弱い→強い」として、演奏の強さに合わせて使い分けます。</div>
   <div class="group"><label class="filebtn">まとめて選ぶ(ファイル名で自動振り分け)<input type="file" id="smpBulk" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" multiple style="display:none"></label>
     <label class="opt"><input type="checkbox" id="smpOn" checked>録音した音を使う</label></div>
   <div class="help">ファイル名に crash / ride / open hat / hihat / snare / kick / tom などが入っていると自動で判定します。判定できないものは、下のパーツごとの「選ぶ」から追加してください。</div>
