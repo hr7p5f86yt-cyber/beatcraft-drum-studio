@@ -78,7 +78,7 @@ function fitDur(gap, tup) {
 function tsInfo(ts) { return TIME_SIGS[ts] || TIME_SIGS["4/4"]; }
 function newMeasure(ts) { return { ts: ts || "4/4", mark: "", up: [], down: [], dyn: [], hp: [], rs: false, re: false, sim: false, mr: false, dbl: false }; }
 function newScore() {
-  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", bpm: 120,
+  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", simNotes: false, bpm: 120,
            measures: [newMeasure(), newMeasure(), newMeasure(), newMeasure()] };
 }
 function measureStarts(score) {
@@ -459,7 +459,7 @@ function migrateScore(raw) {
     if (!raw || typeof raw !== "object" || !Array.isArray(raw.measures) || raw.measures.length === 0)
       return { ok: false, error: "楽譜データの形式が正しくありません" };
     const ver = parseInt(String(raw.version || raw.schemaVersion || "0"), 10);
-    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80),
+    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80), simNotes: !!raw.simNotes,
                   bpm: clampInt(raw.bpm, 40, 240, 120), measures: [] };
     for (const m of raw.measures) {
       const ts = TIME_SIGS[m.ts || m.timeSignature] ? (m.ts || m.timeSignature) : "4/4";

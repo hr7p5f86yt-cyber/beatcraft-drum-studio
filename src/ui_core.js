@@ -26,6 +26,7 @@ function snapOf(cd) { return cd.tup ? cd.d : Math.min(12, cd.d); }
 function renderAll() {
   const r = buildScoreSvg(state.score); state.view = r;
   $("scoreHost").innerHTML = `<svg id="scoreSvg" viewBox="0 0 ${r.width} ${r.height}" xmlns="http://www.w3.org/2000/svg">${r.svg}<g id="overlay" pointer-events="none"></g><line id="playhead" x1="0" y1="0" x2="0" y2="0" stroke="#2563eb" stroke-width="2" opacity="0.65" visibility="hidden"/></svg>`;
+  if ($("simNotesChk")) $("simNotesChk").checked = !!state.score.simNotes; document.querySelectorAll("[data-simstyle-btn]").forEach(b => { b.textContent = state.score.simNotes ? "% 表示:音符" : "% 表示:記号"; b.classList.toggle("active", !!state.score.simNotes); });
   $("titleInput").value = state.score.title; $("subtitleInput").value = state.score.subtitle || ""; $("composerInput").value = state.score.composer || "";
   $("bpmVal").textContent = state.score.bpm; $("bpmRange").value = state.score.bpm;
   if (typeof applyZoom === "function") applyZoom();
@@ -100,6 +101,10 @@ function cycleVoice() {
   state.voice = state.voice === "auto" ? "up" : state.voice === "up" ? "down" : "auto";
   document.querySelectorAll("[data-voice-btn]").forEach(b => { b.textContent = VOICE_LABEL[state.voice]; b.classList.toggle("active", state.voice !== "auto"); });
   showStatus(state.voice === "auto" ? "声部: 自動(手で叩くものは1声、足で操作するものは2声)" : "声部: " + (state.voice === "up" ? "1声(符尾は上向き)" : "2声(符尾は下向き)") + " に入力します");
+}
+function toggleSimStyle() {
+  state.score.simNotes = !state.score.simNotes; commit();
+  showStatus(state.score.simNotes ? "「%(前の小節と同じ)」を音符で表示します(印刷・画像にも反映)" : "「%(前の小節と同じ)」を繰り返し記号で表示します");
 }
 function eraseNear(it, p) {
   let best = null, bd = 20;

@@ -34,6 +34,7 @@ function buildDock() {
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
     mk("dk-btn", "📄 新規", newBlankScore),
+    mk("dk-btn", "% 表示:記号", toggleSimStyle, { simstyleBtn: 1 }),
     mk("dk-btn", VOICE_LABEL[state.voice], cycleVoice, { voiceBtn: 1 }),
     mk("dk-btn", "休符で進む", () => { needCursor(); const r = stepCursor(state.score, state.cursor, stepNow(), 1); if (!r.overflow) setCursor(r, state.extend); }));
   d.append(pads, nav, dur);

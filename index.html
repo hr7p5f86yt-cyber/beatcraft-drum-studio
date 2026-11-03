@@ -85,7 +85,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.6.0</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.7.0</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -132,7 +132,7 @@ body.has-dock .toast{bottom:200px}
       <div class="group">
         <span class="label">連符・連桁</span>
         <button id="tupConvBtn" title="選択範囲(なければカーソルのある拍)を3連符にする。キー: M">3連符に変換</button><button id="tupOffBtn" title="3連符を通常の音符に戻す">連符を解除</button>
-        <button id="simBtn" title="カーソル(選択範囲)の小節を「前と同じ(%)」にする/戻す。キー: %">% 前の小節と同じ</button><button id="autoSimBtn" title="直前と全く同じ小節を、まとめて % にする">同じ小節を自動で%に</button><button id="autoMrBtn" title="空の小節が続く所を「N小節休符」にまとめて表示">空の小節をまとめる</button>
+        <button id="simBtn" title="カーソル(選択範囲)の小節を「前と同じ(%)」にする/戻す。キー: %">% 前の小節と同じ</button><label class="opt" title="オン: 「%」の小節を、前の小節と同じ音符で表示します(初心者向けの譜面など)"><input type="checkbox" id="simNotesChk">%を音符で表示</label><button id="autoSimBtn" title="直前と全く同じ小節を、まとめて % にする">同じ小節を自動で%に</button><button id="autoMrBtn" title="空の小節が続く所を「N小節休符」にまとめて表示">空の小節をまとめる</button>
         <button id="beamBtn" title="カーソル位置の音符と直前の音符の連桁を切る/つなぐ。キー: B">連桁 切る/つなぐ</button>
       </div>
       <div class="group">
@@ -335,7 +335,7 @@ function fitDur(gap, tup) {
 function tsInfo(ts) { return TIME_SIGS[ts] || TIME_SIGS["4/4"]; }
 function newMeasure(ts) { return { ts: ts || "4/4", mark: "", up: [], down: [], dyn: [], hp: [], rs: false, re: false, sim: false, mr: false, dbl: false }; }
 function newScore() {
-  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", bpm: 120,
+  return { schemaVersion: SCHEMA_VERSION, title: "マイ・ドラム・スコア", subtitle: "", composer: "", simNotes: false, bpm: 120,
            measures: [newMeasure(), newMeasure(), newMeasure(), newMeasure()] };
 }
 function measureStarts(score) {
@@ -716,7 +716,7 @@ function migrateScore(raw) {
     if (!raw || typeof raw !== "object" || !Array.isArray(raw.measures) || raw.measures.length === 0)
       return { ok: false, error: "楽譜データの形式が正しくありません" };
     const ver = parseInt(String(raw.version || raw.schemaVersion || "0"), 10);
-    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80),
+    const out = { schemaVersion: SCHEMA_VERSION, title: String(raw.title || "マイ・ドラム・スコア").slice(0, 80), subtitle: String(raw.subtitle || "").slice(0, 80), composer: String(raw.composer || "").slice(0, 80), simNotes: !!raw.simNotes,
                   bpm: clampInt(raw.bpm, 40, 240, 120), measures: [] };
     for (const m of raw.measures) {
       const ts = TIME_SIGS[m.ts || m.timeSignature] ? (m.ts || m.timeSignature) : "4/4";
@@ -1042,6 +1042,8 @@ function measureNotesSvg(it, out) {
   const L = LAYOUT, S = L.S, m = it.m; let s = "";
   const xOf = t => it.xStart + L.HEAD_OFF + t * it.ppt;
   const bothEmpty = m.up.length === 0 && m.down.length === 0;
+  if (!it.mrN && m.mr && bothEmpty && !m.sim && !m.rs && !m.re)               // 1小節だけの休み: 休符の上に「1」
+    s += `<text x="${f(it.xStart + it.tw * 0.62)}" y="${f(it.staffTop - 10)}" font-family="'Times New Roman','Noto Serif JP',serif" font-weight="bold" font-size="21" text-anchor="middle">1</text>`;
   if (it.mrN) {                                                  // 複数小節休符: 太い横線 + 小節数
     const x1 = it.xStart + 6, x2 = it.xStart + it.tw - 2, y = it.staffTop + 2 * S, serif = "'Times New Roman','Noto Serif JP',serif";
     return `<rect x="${f(x1)}" y="${f(y - 2.6)}" width="${f(x2 - x1)}" height="5.2" fill="#000"/><line x1="${f(x1)}" y1="${f(y - 8)}" x2="${f(x1)}" y2="${f(y + 8)}" stroke="#000" stroke-width="1.4"/><line x1="${f(x2)}" y1="${f(y - 8)}" x2="${f(x2)}" y2="${f(y + 8)}" stroke="#000" stroke-width="1.4"/>`
@@ -1054,7 +1056,7 @@ function measureNotesSvg(it, out) {
   }
   if (bothEmpty) {
     const cx = it.xStart + it.tw / 2, y = it.staffTop + S;
-    return `<rect x="${f(cx - 6)}" y="${f(y)}" width="12" height="4.5" fill="#000"/>`;
+    return s + `<rect x="${f(cx - 6)}" y="${f(y)}" width="12" height="4.5" fill="#000"/>`;
   }
   for (const voice of ["up", "down"]) {
     if (m[voice].length === 0) continue;                       // 空の声部は休符を出さない
@@ -1159,8 +1161,18 @@ function repeatBarsSvg(it) {
 }
 
 /* ---- 4) 全体のSVG ---- */
+/* 「%(前と同じ)」を音符で表示する設定のとき、描画用に %小節を元の小節の中身で置き換えたコピーを作る(データは変えない) */
+function displayScore(score) {
+  if (!score.simNotes || !score.measures.some(m => m.sim)) return score;
+  const cp = o => JSON.parse(JSON.stringify(o));
+  return Object.assign({}, score, { measures: score.measures.map((m, i) => {
+    if (!m.sim || i === 0) return m;
+    const src = simSource(score, i), ticks = tsInfo(m.ts).ticks;
+    return Object.assign({}, m, { sim: false, up: cp(src.up).filter(n => n.t < ticks), down: cp(src.down).filter(n => n.t < ticks) });
+  }) });
+}
 function buildScoreSvg(score, opt) {
-  opt = opt || {};
+  opt = opt || {}; score = displayScore(score);
   const L = LAYOUT, S = L.S, lay = layoutScore(score);
   const out = { heads: [], layout: lay };
   let s = `<rect x="0" y="0" width="${lay.width}" height="${lay.height}" fill="#fff"/>`;
@@ -1813,7 +1825,8 @@ function omrToMeasures(res, tsKey) {
       });
     });
     out.push(m);
-    if (n >= 2) { m.mr = true; for (let k = 1; k < n; k++) out.push(newMeasure(tk)); }              // N小節休符 → 空の小節をN個(まとめて表示)
+    if (rm.mrN >= 1) m.mr = true;
+    if (n >= 2) { for (let k = 1; k < n; k++) out.push(newMeasure(tk)); }              // N小節休符 → 空の小節をN個(まとめて表示)
   });
   return out;
 }
@@ -2104,6 +2117,7 @@ function snapOf(cd) { return cd.tup ? cd.d : Math.min(12, cd.d); }
 function renderAll() {
   const r = buildScoreSvg(state.score); state.view = r;
   $("scoreHost").innerHTML = `<svg id="scoreSvg" viewBox="0 0 ${r.width} ${r.height}" xmlns="http://www.w3.org/2000/svg">${r.svg}<g id="overlay" pointer-events="none"></g><line id="playhead" x1="0" y1="0" x2="0" y2="0" stroke="#2563eb" stroke-width="2" opacity="0.65" visibility="hidden"/></svg>`;
+  if ($("simNotesChk")) $("simNotesChk").checked = !!state.score.simNotes; document.querySelectorAll("[data-simstyle-btn]").forEach(b => { b.textContent = state.score.simNotes ? "% 表示:音符" : "% 表示:記号"; b.classList.toggle("active", !!state.score.simNotes); });
   $("titleInput").value = state.score.title; $("subtitleInput").value = state.score.subtitle || ""; $("composerInput").value = state.score.composer || "";
   $("bpmVal").textContent = state.score.bpm; $("bpmRange").value = state.score.bpm;
   if (typeof applyZoom === "function") applyZoom();
@@ -2178,6 +2192,10 @@ function cycleVoice() {
   state.voice = state.voice === "auto" ? "up" : state.voice === "up" ? "down" : "auto";
   document.querySelectorAll("[data-voice-btn]").forEach(b => { b.textContent = VOICE_LABEL[state.voice]; b.classList.toggle("active", state.voice !== "auto"); });
   showStatus(state.voice === "auto" ? "声部: 自動(手で叩くものは1声、足で操作するものは2声)" : "声部: " + (state.voice === "up" ? "1声(符尾は上向き)" : "2声(符尾は下向き)") + " に入力します");
+}
+function toggleSimStyle() {
+  state.score.simNotes = !state.score.simNotes; commit();
+  showStatus(state.score.simNotes ? "「%(前の小節と同じ)」を音符で表示します(印刷・画像にも反映)" : "「%(前の小節と同じ)」を繰り返し記号で表示します");
 }
 function eraseNear(it, p) {
   let best = null, bd = 20;
@@ -2325,6 +2343,7 @@ function buildDock() {
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
     mk("dk-btn", "📄 新規", newBlankScore),
+    mk("dk-btn", "% 表示:記号", toggleSimStyle, { simstyleBtn: 1 }),
     mk("dk-btn", VOICE_LABEL[state.voice], cycleVoice, { voiceBtn: 1 }),
     mk("dk-btn", "休符で進む", () => { needCursor(); const r = stepCursor(state.score, state.cursor, stepNow(), 1); if (!r.overflow) setCursor(r, state.extend); }));
   d.append(pads, nav, dur);
@@ -2968,7 +2987,7 @@ function bindEvents() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("scoreHost", "click", onScoreClick);
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
-  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("voiceBtn", "click", cycleVoice);
+  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("simNotesChk", "change", toggleSimStyle); on("voiceBtn", "click", cycleVoice);
   on("bpmRange", "input", e => changeBpm(e.target.value));
   on("subtitleInput", "change", e => { state.score.subtitle = e.target.value.trim().slice(0, 80); commit(); });
   on("composerInput", "change", e => { state.score.composer = e.target.value.trim().slice(0, 80); commit(); });

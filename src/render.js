@@ -121,6 +121,8 @@ function measureNotesSvg(it, out) {
   const L = LAYOUT, S = L.S, m = it.m; let s = "";
   const xOf = t => it.xStart + L.HEAD_OFF + t * it.ppt;
   const bothEmpty = m.up.length === 0 && m.down.length === 0;
+  if (!it.mrN && m.mr && bothEmpty && !m.sim && !m.rs && !m.re)               // 1小節だけの休み: 休符の上に「1」
+    s += `<text x="${f(it.xStart + it.tw * 0.62)}" y="${f(it.staffTop - 10)}" font-family="'Times New Roman','Noto Serif JP',serif" font-weight="bold" font-size="21" text-anchor="middle">1</text>`;
   if (it.mrN) {                                                  // 複数小節休符: 太い横線 + 小節数
     const x1 = it.xStart + 6, x2 = it.xStart + it.tw - 2, y = it.staffTop + 2 * S, serif = "'Times New Roman','Noto Serif JP',serif";
     return `<rect x="${f(x1)}" y="${f(y - 2.6)}" width="${f(x2 - x1)}" height="5.2" fill="#000"/><line x1="${f(x1)}" y1="${f(y - 8)}" x2="${f(x1)}" y2="${f(y + 8)}" stroke="#000" stroke-width="1.4"/><line x1="${f(x2)}" y1="${f(y - 8)}" x2="${f(x2)}" y2="${f(y + 8)}" stroke="#000" stroke-width="1.4"/>`
@@ -133,7 +135,7 @@ function measureNotesSvg(it, out) {
   }
   if (bothEmpty) {
     const cx = it.xStart + it.tw / 2, y = it.staffTop + S;
-    return `<rect x="${f(cx - 6)}" y="${f(y)}" width="12" height="4.5" fill="#000"/>`;
+    return s + `<rect x="${f(cx - 6)}" y="${f(y)}" width="12" height="4.5" fill="#000"/>`;
   }
   for (const voice of ["up", "down"]) {
     if (m[voice].length === 0) continue;                       // 空の声部は休符を出さない
@@ -238,8 +240,18 @@ function repeatBarsSvg(it) {
 }
 
 /* ---- 4) 全体のSVG ---- */
+/* 「%(前と同じ)」を音符で表示する設定のとき、描画用に %小節を元の小節の中身で置き換えたコピーを作る(データは変えない) */
+function displayScore(score) {
+  if (!score.simNotes || !score.measures.some(m => m.sim)) return score;
+  const cp = o => JSON.parse(JSON.stringify(o));
+  return Object.assign({}, score, { measures: score.measures.map((m, i) => {
+    if (!m.sim || i === 0) return m;
+    const src = simSource(score, i), ticks = tsInfo(m.ts).ticks;
+    return Object.assign({}, m, { sim: false, up: cp(src.up).filter(n => n.t < ticks), down: cp(src.down).filter(n => n.t < ticks) });
+  }) });
+}
 function buildScoreSvg(score, opt) {
-  opt = opt || {};
+  opt = opt || {}; score = displayScore(score);
   const L = LAYOUT, S = L.S, lay = layoutScore(score);
   const out = { heads: [], layout: lay };
   let s = `<rect x="0" y="0" width="${lay.width}" height="${lay.height}" fill="#fff"/>`;

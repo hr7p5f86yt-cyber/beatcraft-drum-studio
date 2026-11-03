@@ -164,7 +164,7 @@ function bindEvents() {
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on("scoreHost", "click", onScoreClick);
   on("playBtn", "click", togglePlay); on("stopBtn", "click", stopPlay); on("loopBtn", "click", toggleLoop);
-  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("voiceBtn", "click", cycleVoice);
+  on("undoBtn", "click", undo); on("redoBtn", "click", redo); on("clearBtn", "click", clearAllNotes); on("newBtn", "click", newBlankScore); on("simNotesChk", "change", toggleSimStyle); on("voiceBtn", "click", cycleVoice);
   on("bpmRange", "input", e => changeBpm(e.target.value));
   on("subtitleInput", "change", e => { state.score.subtitle = e.target.value.trim().slice(0, 80); commit(); });
   on("composerInput", "change", e => { state.score.composer = e.target.value.trim().slice(0, 80); commit(); });

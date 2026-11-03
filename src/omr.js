@@ -593,7 +593,8 @@ function omrToMeasures(res, tsKey) {
       });
     });
     out.push(m);
-    if (n >= 2) { m.mr = true; for (let k = 1; k < n; k++) out.push(newMeasure(tk)); }              // N小節休符 → 空の小節をN個(まとめて表示)
+    if (rm.mrN >= 1) m.mr = true;
+    if (n >= 2) { for (let k = 1; k < n; k++) out.push(newMeasure(tk)); }              // N小節休符 → 空の小節をN個(まとめて表示)
   });
   return out;
 }
