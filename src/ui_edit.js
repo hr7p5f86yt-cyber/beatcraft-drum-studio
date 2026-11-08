@@ -243,6 +243,7 @@ function onKeyDown(e) {
   else if (INST_KEYS[lk]) { placeAt(INST_KEYS[lk], e.shiftKey ? !state.auto : state.auto); }
   else if (lk === "a") applyFlag("acc", "アクセント");
   else if (lk === "g") applyFlag("gh", "ゴースト");
+  else if (lk === "z") applyFlag("bz", "バズロール(z)");
   else if (lk === "f") applyFlag(e.shiftKey ? "dr" : "fl", e.shiftKey ? "ドラッグ" : "フラム");
   else if (lk === "b") applyBeam();
   else if (lk === "m") applyTuplet("toggle");

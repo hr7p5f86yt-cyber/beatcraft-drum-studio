@@ -285,7 +285,7 @@ function bindEvents() {
   on("modeSelect", "click", () => { state.mode = "select"; updateButtons(); });
   document.querySelectorAll("[data-dyn]").forEach(b => b.addEventListener("click", () => applyDynamic(b.dataset.dyn)));
   on("hpCresc", "click", () => applyHairpin("c")); on("hpDim", "click", () => applyHairpin("d")); on("clearMarks", "click", clearMarksHere);
-  on("accBtn", "click", () => applyFlag("acc", "アクセント")); on("ghostBtn", "click", () => applyFlag("gh", "ゴースト")); on("flamBtn", "click", () => applyFlag("fl", "フラム")); on("dragBtn", "click", () => applyFlag("dr", "ドラッグ"));
+  on("accBtn", "click", () => applyFlag("acc", "アクセント")); on("ghostBtn", "click", () => applyFlag("gh", "ゴースト")); on("buzzBtn", "click", () => applyFlag("bz", "バズロール(z)")); on("flamBtn", "click", () => applyFlag("fl", "フラム")); on("dragBtn", "click", () => applyFlag("dr", "ドラッグ"));
   on("beamBtn", "click", applyBeam); on("tupConvBtn", "click", () => applyTuplet("to")); on("tupOffBtn", "click", () => applyTuplet("from"));
   on("simBtn", "click", toggleSimHere); on("autoSimBtn", "click", applyAutoSim); on("autoMrBtn", "click", applyAutoMr);
   on("helpBtn", "click", openHelp);

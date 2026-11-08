@@ -151,7 +151,7 @@ function fillRests(arr, ticks, beat) {
   const pushGap = (from, to) => { for (const r of decomposeGap(from, to - from, beat)) out.push(r); };
   for (const n of arr) {
     if (n.t > pos) pushGap(pos, n.t);
-    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, fl: !!n.fl, dr: !!n.dr, bm: n.bm, ref: n });
+    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, fl: !!n.fl, dr: !!n.dr, bz: !!n.bz, bm: n.bm, ref: n });
     pos = Math.max(pos, n.t + n.d);
   }
   if (pos < ticks) pushGap(pos, ticks);
@@ -165,6 +165,8 @@ function decomposeGap(t, gap, beat) {
     if (t % 12 === 0 && gap >= 12 && !(gap < 24 && gap % 12 !== 0)) {
       const pos = t % beat;
       const cands = beat === 72 ? [72, 24, 12, 6] : [192, 96, 48, 24, 12, 6];
+      if (beat === 48 && gap === 72 && t % 48 === 0) { res.push({ t, d: 72, tup: false, i: [], rest: true }); t += 72; gap -= 72; continue; }   // 付点4分休符(4分+8分の2つに分けない)
+      if (beat === 48 && gap === 36 && t % 24 === 0) { res.push({ t, d: 36, tup: false, i: [], rest: true }); t += 36; gap -= 36; continue; }   // 付点8分休符
       for (const c of cands) {
         if (c > gap || t % c !== 0) continue;
         if (c < beat && pos + c > beat) continue;       // 拍をまたがない
@@ -226,7 +228,7 @@ function toggleNoteFlag(score, g0, g1, flag) {
   score.measures.forEach((m, k) => ["up", "down"].forEach(v => m[v].forEach(n => {
     const g = starts[k] + n.t; if (g >= g0 && g < g1) targets.push(n);
   })));
-  if (flag === "fl" || flag === "dr") for (let k = targets.length - 1; k >= 0; k--) if (targets[k].i.every(x => x === "kick" || x === "hh_pedal")) targets.splice(k, 1);   // 足の音に装飾音はつけない
+  if (flag === "fl" || flag === "dr" || flag === "bz") for (let k = targets.length - 1; k >= 0; k--) if (targets[k].i.every(x => x === "kick" || x === "hh_pedal")) targets.splice(k, 1);   // 足の音に装飾音はつけない
   if (!targets.length) return 0;
   const allSet = targets.every(n => n[flag]);
   targets.forEach(n => { if (allSet) delete n[flag]; else n[flag] = true; });
@@ -437,6 +439,10 @@ function buildPlayEvents(score, opt) {
       const e = { gt: seg.start + n.t, i: n.i.slice(), vel: noteVelocity(level(seg.gStart + n.t), n) };
       if (expr) { const info = tsInfo(m.ts), xs = n.i.map(k => expressionFor(k, n.t, info, n)); e.dv = xs.map(x => x.dv); e.dt = xs.map(x => x.dt); }
       ev.push(e);
+      if (n.bz) {                                                          // バズロール: 音符の長さのあいだ、32分音符のこまかさで同じ音をくり返す(だんだん弱く)
+        const main = n.i.filter(x => x !== "kick" && x !== "hh_pedal")[0] || n.i[0], cnt = Math.min(24, Math.floor(n.d / 6)) - 1;
+        for (let j = 1; j <= cnt; j++) ev.push({ gt: e.gt + j * 6, i: [main], vel: Math.max(1, Math.round(e.vel * (0.72 - 0.12 * Math.min(1, j / 6)))) });
+      }
       if (n.fl || n.dr) {                                                  // 装飾音: 本体の少し前に、小さい音で1つ(フラム)/2つ(ドラッグ)
         const k = n.dr ? 2 : 1, main = n.i.filter(x => x !== "kick" && x !== "hh_pedal")[0] || n.i[0];
         for (let j = 0; j < k; j++) ev.push({ gt: e.gt, i: [main], vel: Math.max(1, Math.round(e.vel * GRACE_RATIO)), grace: (k - j) * GRACE_MS });
@@ -490,6 +496,7 @@ function migrateScore(raw) {
             if (n.gh) made.gh = true;
             if (n.fl && !n.dr) made.fl = true;
             if (n.dr) made.dr = true;
+            if (n.bz && !made.i.every(x => x === "kick" || x === "hh_pedal")) made.bz = true;
             if (n.bm === "break" || n.bm === "join") made.bm = n.bm;
           }
         }

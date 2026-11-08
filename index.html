@@ -88,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.16.1</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.17.0</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="overwriteBtn" title="今の題名のまま、保存済みの楽譜に上書きします(まだ保存していなければ保存画面が開きます)">💾 上書き</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -129,7 +129,7 @@ body.has-dock .toast{bottom:200px}
         <button id="hpCresc" title="キー: <">＜ クレッシェンド</button><button id="hpDim" title="キー: >">＞ デクレッシェンド</button><button id="clearMarks" class="small" title="キー: X">記号を外す</button>
       </div>
       <div class="group">
-        <button id="accBtn" title="キー: A">&gt; アクセント</button><button id="ghostBtn" title="キー: G">( ) ゴースト</button><button id="flamBtn" title="キー: F">♪ フラム</button><button id="dragBtn" title="キー: Shift+F">♪♪ ドラッグ</button>
+        <button id="accBtn" title="キー: A">&gt; アクセント</button><button id="ghostBtn" title="キー: G">( ) ゴースト</button><button id="buzzBtn" title="キー: Z">z バズ</button><button id="flamBtn" title="キー: F">♪ フラム</button><button id="dragBtn" title="キー: Shift+F">♪♪ ドラッグ</button>
       </div>
     </div>
     <div class="row">
@@ -415,7 +415,7 @@ function fillRests(arr, ticks, beat) {
   const pushGap = (from, to) => { for (const r of decomposeGap(from, to - from, beat)) out.push(r); };
   for (const n of arr) {
     if (n.t > pos) pushGap(pos, n.t);
-    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, fl: !!n.fl, dr: !!n.dr, bm: n.bm, ref: n });
+    out.push({ t: n.t, d: n.d, tup: n.tup, i: n.i, rest: false, acc: !!n.acc, gh: !!n.gh, fl: !!n.fl, dr: !!n.dr, bz: !!n.bz, bm: n.bm, ref: n });
     pos = Math.max(pos, n.t + n.d);
   }
   if (pos < ticks) pushGap(pos, ticks);
@@ -429,6 +429,8 @@ function decomposeGap(t, gap, beat) {
     if (t % 12 === 0 && gap >= 12 && !(gap < 24 && gap % 12 !== 0)) {
       const pos = t % beat;
       const cands = beat === 72 ? [72, 24, 12, 6] : [192, 96, 48, 24, 12, 6];
+      if (beat === 48 && gap === 72 && t % 48 === 0) { res.push({ t, d: 72, tup: false, i: [], rest: true }); t += 72; gap -= 72; continue; }   // 付点4分休符(4分+8分の2つに分けない)
+      if (beat === 48 && gap === 36 && t % 24 === 0) { res.push({ t, d: 36, tup: false, i: [], rest: true }); t += 36; gap -= 36; continue; }   // 付点8分休符
       for (const c of cands) {
         if (c > gap || t % c !== 0) continue;
         if (c < beat && pos + c > beat) continue;       // 拍をまたがない
@@ -490,7 +492,7 @@ function toggleNoteFlag(score, g0, g1, flag) {
   score.measures.forEach((m, k) => ["up", "down"].forEach(v => m[v].forEach(n => {
     const g = starts[k] + n.t; if (g >= g0 && g < g1) targets.push(n);
   })));
-  if (flag === "fl" || flag === "dr") for (let k = targets.length - 1; k >= 0; k--) if (targets[k].i.every(x => x === "kick" || x === "hh_pedal")) targets.splice(k, 1);   // 足の音に装飾音はつけない
+  if (flag === "fl" || flag === "dr" || flag === "bz") for (let k = targets.length - 1; k >= 0; k--) if (targets[k].i.every(x => x === "kick" || x === "hh_pedal")) targets.splice(k, 1);   // 足の音に装飾音はつけない
   if (!targets.length) return 0;
   const allSet = targets.every(n => n[flag]);
   targets.forEach(n => { if (allSet) delete n[flag]; else n[flag] = true; });
@@ -701,6 +703,10 @@ function buildPlayEvents(score, opt) {
       const e = { gt: seg.start + n.t, i: n.i.slice(), vel: noteVelocity(level(seg.gStart + n.t), n) };
       if (expr) { const info = tsInfo(m.ts), xs = n.i.map(k => expressionFor(k, n.t, info, n)); e.dv = xs.map(x => x.dv); e.dt = xs.map(x => x.dt); }
       ev.push(e);
+      if (n.bz) {                                                          // バズロール: 音符の長さのあいだ、32分音符のこまかさで同じ音をくり返す(だんだん弱く)
+        const main = n.i.filter(x => x !== "kick" && x !== "hh_pedal")[0] || n.i[0], cnt = Math.min(24, Math.floor(n.d / 6)) - 1;
+        for (let j = 1; j <= cnt; j++) ev.push({ gt: e.gt + j * 6, i: [main], vel: Math.max(1, Math.round(e.vel * (0.72 - 0.12 * Math.min(1, j / 6)))) });
+      }
       if (n.fl || n.dr) {                                                  // 装飾音: 本体の少し前に、小さい音で1つ(フラム)/2つ(ドラッグ)
         const k = n.dr ? 2 : 1, main = n.i.filter(x => x !== "kick" && x !== "hh_pedal")[0] || n.i[0];
         for (let j = 0; j < k; j++) ev.push({ gt: e.gt, i: [main], vel: Math.max(1, Math.round(e.vel * GRACE_RATIO)), grace: (k - j) * GRACE_MS });
@@ -754,6 +760,7 @@ function migrateScore(raw) {
             if (n.gh) made.gh = true;
             if (n.fl && !n.dr) made.fl = true;
             if (n.dr) made.dr = true;
+            if (n.bz && !made.i.every(x => x === "kick" || x === "hh_pedal")) made.bz = true;
             if (n.bm === "break" || n.bm === "join") made.bm = n.bm;
           }
         }
@@ -1141,6 +1148,10 @@ function measureNotesSvg(it, out) {
       if (e.gh) {                                               // ゴースト: 音符全体を括弧で囲む
         const lx = x - e.hw - 3.5, rx = x + e.hw + 3.5, y0 = e.top - 6, y1 = e.bot + 6, ym = (y0 + y1) / 2;
         s += `<path d="M${f(lx)} ${f(y0)}Q${f(lx - 5)} ${f(ym)} ${f(lx)} ${f(y1)}M${f(rx)} ${f(y0)}Q${f(rx + 5)} ${f(ym)} ${f(rx)} ${f(y1)}" stroke="#000" stroke-width="1.2" fill="none"/>`;
+      }
+      if (e.bz && e.info.nv < 192) {                            // バズロール: 符幹をよこぎる「z」印
+        const bx = stemX(e), by = dirUp ? e.end + 17 : e.end - 17;
+        s += `<path d="M${f(bx - 4.5)} ${f(by - 3.5)}L${f(bx + 4.5)} ${f(by - 3.5)}L${f(bx - 4.5)} ${f(by + 3.5)}L${f(bx + 4.5)} ${f(by + 3.5)}" stroke="#000" stroke-width="1.7" fill="none" stroke-linejoin="round"/>`;
       }
       if (e.acc) {                                              // アクセント >
         const ay = dirUp ? e.end - 8 : e.end + 8, ax = stemX(e);
@@ -1840,7 +1851,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       repEnd[k] = e; repStart[k] = s0;
     }
   }
-  heads.forEach(q => { const b = omrBeamInfo(bin, w, h, q, S); q.nb = b.nb; q.sd = b.dir; });
+  heads.forEach(q => { const b = omrBeamInfo(bin, w, h, q, S); q.nb = b.nb; q.sd = b.dir; q.stx = b.x; q.stt = b.tip; q.bz = !!b.bz && q.nb <= 1 && !heads.some(o => o !== q && Math.abs(o.x - b.x) < 1.1 * S && o.y > Math.min(b.tip, q.y) - 0.5 * S && o.y < Math.max(b.tip, q.y) + 0.5 * S && (o.kind === "cross" || Math.abs(o.y - q.y) > 0.4 * S)); });
   return { st, barX, repEnd, repStart, heads, graces, rests, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
@@ -1872,7 +1883,25 @@ function omrBeamInfo(bin, w, h, q, S) {
     for (const [a0, a1] of runs) { const len = a1 - a0 + 1; if (len < minRun || len > 0.75 * S) continue; if (last < 0 ? a0 > 0.3 * S : a0 - last > 0.35 * S) break; n++; last = a1; }
     nb = Math.max(nb, n);
   }
-  return { nb: Math.min(3, nb), dir: best.dir, tip: best.tip, x: best.x };
+  let bz = false;                                                    // バズロール(符幹をよこぎる「z」印): 符幹の途中で、左右の両側に黒い横線がある所が2か所以上
+  if (q.kind !== "cross" || true) {
+    const Lh = Math.abs(best.tip - q.y), k0 = Math.round(1.0 * S), k1 = Math.round(Lh - 1.1 * S), offs = [Math.round(0.5 * S), Math.round(0.65 * S)];
+    let stemOk = k1 - k0 >= 0.8 * S;
+    if (stemOk) { let on = 0; for (let k = 0; k <= k1; k++) { const y = Math.round(best.tip - best.dir * (Lh - k)); if (y >= 0 && y < h && (bin[y * w + best.x] || bin[y * w + best.x - 1] || bin[y * w + best.x + 1])) on++; } stemOk = on >= 0.95 * (k1 + 1); }   // 本物の符幹が、頭から「z」の位置まで途切れずにある
+    if (stemOk) {
+      const hw = Math.round(0.55 * S), o2 = Math.round(1.05 * S), mt = 2;
+      for (let dx0 = Math.round(-0.3 * S); dx0 <= Math.round(1.0 * S) && !bz; dx0++) {          // 「z」は符幹のすぐ右にずれていることもあるので、中心を少しずらして探す
+        const xc = best.x + dx0; let runs = 0, len = 0, narrow = 0, nw = true;
+        for (let k = k0; k <= k1 + 1; k++) {
+          const y = Math.round(best.tip - best.dir * k); let ok = k <= k1 && y >= 0 && y < h;
+          if (ok) { for (let dx = -hw; dx <= hw; dx++) if (!bin[y * w + xc + dx]) { ok = false; break; } if (ok && bin[y * w + xc - o2]) ok = false; }
+          if (ok) { len++; if (bin[y * w + xc + o2]) nw = false; } else { if (len >= mt) { runs++; if (nw) narrow++; } len = 0; nw = true; }
+        }
+        if (runs >= 2 && narrow >= 1) bz = true;
+      }
+    }
+  }
+  return { nb: Math.min(3, nb), dir: best.dir, tip: best.tip, x: best.x, bz };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
@@ -2097,7 +2126,29 @@ function omrRecognize(g0, w, h, opt) {
       measures.push({ sys: si, idx: measures.length, rs: !!sy.repStart[m], re: !!sy.repEnd[m + 1], x0: xl, x1: xr, c, slots, restsT, ev: evs.map((e, i) => Math.round(e.x) + (e.o ? "n" : "r") + (e.dot ? "." : "") + ":" + qs0[i].t + (qs0[i].tup ? "t" : "")), ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
     }
   });
+  omrHarmonize(measures);
   return { ok: true, skew, gray: g, w, h, S, systems, measures, padL, bpm, tsFound };
+}
+/* 同じ形の小節(音符の並び・楽器・小節内の相対位置がほぼ同じ)が3つ以上あるとき、拍の読み取りがちがう小節は、多数派の読み取りにそろえる。
+ * 同じリズムの小節は楽譜ソフトでも同じ相対位置に並ぶので、位置の差が16分音符の1/3より小さいものだけを同じ形とみなす */
+function omrHarmonize(measures) {
+  const items = [];
+  measures.forEach(m => {
+    if (m.mrN || !m.slots || m.slots.length < 3) return;
+    const W = m.x1 - m.c; if (!(W > 0)) return;
+    const rel = m.slots.map(sl => (sl.heads.reduce((a, h) => a + h.x, 0) / sl.heads.length - m.c) / W);
+    items.push({ m, rel, key: m.ts + "|" + m.slots.map(sl => sl.heads.map(h => h.inst).sort().join("+")).join(",") });
+  });
+  const groups = [];
+  items.forEach(it => { const g = groups.find(g => g.key === it.key && g.rel.every((r, i) => Math.abs(r - it.rel[i]) <= 0.02)); if (g) g.list.push(it); else groups.push({ key: it.key, rel: it.rel, list: [it] }); });
+  groups.forEach(g => {
+    if (g.list.length < 3) return;
+    const votes = {}; g.list.forEach(it => { const k = it.m.slots.map(sl => sl.t + (sl.tup ? "t" : "")).join(" "); votes[k] = (votes[k] || 0) + 1; });
+    const ranked = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+    if (ranked.length < 2 || ranked[0][1] < 2 || ranked[0][1] === ranked[1][1]) return;
+    const win = ranked[0][0].split(" ");
+    g.list.forEach(it => { it.m.slots.forEach((sl, i) => { const w = win[i], tup = w.endsWith("t"); sl.t = parseInt(w, 10); sl.tup = tup; }); it.m.harmonized = true; });
+  });
 }
 
 /* ---- リハーサル記号(四角で囲んだ文字)と、テンポ(♩=数字) ---- */
@@ -2159,13 +2210,14 @@ function omrToMeasures(res, tsKey) {
     const tk = rm.ts || tsKey || "4/4", ts = tsInfo(tk), n = rm.mrN >= 2 ? rm.mrN : 1;
     const m = newMeasure(tk); m.mark = rm.mark || ""; m.rs = !!rm.rs; m.re = !!rm.re;
     ["up", "down"].forEach(voice => {
-      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
+      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, bz: s.heads.some(q => q.bz && INSTRUMENTS[q.inst].voice === voice), insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
       list.forEach((s, i) => {
         const next = list[i + 1], nr = (rm.restsT || []).filter(r => r.t > s.t && (voice === "up" ? r.up : r.dn)).map(r => r.t), gap = Math.min(next ? next.t : ts.ticks, ...nr) - s.t;   // 次の音符か、同じ声部の次の休符まで
         let d = s.tup ? (fitDur(Math.min(gap, 32), true) || 8) : fitDur(Math.min(gap, 48), false);
         if (!d) d = 6;
         s.insts.forEach(inst => toggleNote(m, inst, s.t, d, s.tup));
         if (s.gr) { const nn = m[voice].find(x => x.t === s.t); if (nn) { if (s.gr >= 2) nn.dr = true; else nn.fl = true; } }      // 装飾音(フラム/ドラッグ)
+        if (s.bz) { const nn = m[voice].find(x => x.t === s.t); if (nn && !nn.i.every(x => x === "kick" || x === "hh_pedal")) nn.bz = true; }      // バズロール(z印)
       });
     });
     out.push(m);
@@ -2693,7 +2745,7 @@ function buildDock() {
   const dur = document.createElement("div"); dur.className = "dk-row";
   DOCK_DURS.forEach(([v, t]) => dur.appendChild(mk("dk-btn", t, () => setBase(v), { dbase: v })));
   dur.append(mk("dk-btn", "付点", () => $("dotBtn").click(), { ddot: 1 }), mk("dk-btn", "3連", () => $("tupBtn").click(), { dtup: 1 }),
-    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()), mk("dk-btn", "フラム", () => $("flamBtn").click()),
+    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()), mk("dk-btn", "バズ", () => $("buzzBtn").click()), mk("dk-btn", "フラム", () => $("flamBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
     mk("dk-btn", "🥁 音源", () => $("sampleBtn").click()),
@@ -2980,6 +3032,7 @@ function onKeyDown(e) {
   else if (INST_KEYS[lk]) { placeAt(INST_KEYS[lk], e.shiftKey ? !state.auto : state.auto); }
   else if (lk === "a") applyFlag("acc", "アクセント");
   else if (lk === "g") applyFlag("gh", "ゴースト");
+  else if (lk === "z") applyFlag("bz", "バズロール(z)");
   else if (lk === "f") applyFlag(e.shiftKey ? "dr" : "fl", e.shiftKey ? "ドラッグ" : "フラム");
   else if (lk === "b") applyBeam();
   else if (lk === "m") applyTuplet("toggle");
@@ -3469,7 +3522,7 @@ function bindEvents() {
   on("modeSelect", "click", () => { state.mode = "select"; updateButtons(); });
   document.querySelectorAll("[data-dyn]").forEach(b => b.addEventListener("click", () => applyDynamic(b.dataset.dyn)));
   on("hpCresc", "click", () => applyHairpin("c")); on("hpDim", "click", () => applyHairpin("d")); on("clearMarks", "click", clearMarksHere);
-  on("accBtn", "click", () => applyFlag("acc", "アクセント")); on("ghostBtn", "click", () => applyFlag("gh", "ゴースト")); on("flamBtn", "click", () => applyFlag("fl", "フラム")); on("dragBtn", "click", () => applyFlag("dr", "ドラッグ"));
+  on("accBtn", "click", () => applyFlag("acc", "アクセント")); on("ghostBtn", "click", () => applyFlag("gh", "ゴースト")); on("buzzBtn", "click", () => applyFlag("bz", "バズロール(z)")); on("flamBtn", "click", () => applyFlag("fl", "フラム")); on("dragBtn", "click", () => applyFlag("dr", "ドラッグ"));
   on("beamBtn", "click", applyBeam); on("tupConvBtn", "click", () => applyTuplet("to")); on("tupOffBtn", "click", () => applyTuplet("from"));
   on("simBtn", "click", toggleSimHere); on("autoSimBtn", "click", applyAutoSim); on("autoMrBtn", "click", applyAutoMr);
   on("helpBtn", "click", openHelp);

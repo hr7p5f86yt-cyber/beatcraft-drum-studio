@@ -567,7 +567,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       repEnd[k] = e; repStart[k] = s0;
     }
   }
-  heads.forEach(q => { const b = omrBeamInfo(bin, w, h, q, S); q.nb = b.nb; q.sd = b.dir; });
+  heads.forEach(q => { const b = omrBeamInfo(bin, w, h, q, S); q.nb = b.nb; q.sd = b.dir; q.stx = b.x; q.stt = b.tip; q.bz = !!b.bz && q.nb <= 1 && !heads.some(o => o !== q && Math.abs(o.x - b.x) < 1.1 * S && o.y > Math.min(b.tip, q.y) - 0.5 * S && o.y < Math.max(b.tip, q.y) + 0.5 * S && (o.kind === "cross" || Math.abs(o.y - q.y) > 0.4 * S)); });
   return { st, barX, repEnd, repStart, heads, graces, rests, zoneEnd, zonesAt, tsRead, mrests, S };
 }
 
@@ -599,7 +599,25 @@ function omrBeamInfo(bin, w, h, q, S) {
     for (const [a0, a1] of runs) { const len = a1 - a0 + 1; if (len < minRun || len > 0.75 * S) continue; if (last < 0 ? a0 > 0.3 * S : a0 - last > 0.35 * S) break; n++; last = a1; }
     nb = Math.max(nb, n);
   }
-  return { nb: Math.min(3, nb), dir: best.dir, tip: best.tip, x: best.x };
+  let bz = false;                                                    // バズロール(符幹をよこぎる「z」印): 符幹の途中で、左右の両側に黒い横線がある所が2か所以上
+  if (q.kind !== "cross" || true) {
+    const Lh = Math.abs(best.tip - q.y), k0 = Math.round(1.0 * S), k1 = Math.round(Lh - 1.1 * S), offs = [Math.round(0.5 * S), Math.round(0.65 * S)];
+    let stemOk = k1 - k0 >= 0.8 * S;
+    if (stemOk) { let on = 0; for (let k = 0; k <= k1; k++) { const y = Math.round(best.tip - best.dir * (Lh - k)); if (y >= 0 && y < h && (bin[y * w + best.x] || bin[y * w + best.x - 1] || bin[y * w + best.x + 1])) on++; } stemOk = on >= 0.95 * (k1 + 1); }   // 本物の符幹が、頭から「z」の位置まで途切れずにある
+    if (stemOk) {
+      const hw = Math.round(0.55 * S), o2 = Math.round(1.05 * S), mt = 2;
+      for (let dx0 = Math.round(-0.3 * S); dx0 <= Math.round(1.0 * S) && !bz; dx0++) {          // 「z」は符幹のすぐ右にずれていることもあるので、中心を少しずらして探す
+        const xc = best.x + dx0; let runs = 0, len = 0, narrow = 0, nw = true;
+        for (let k = k0; k <= k1 + 1; k++) {
+          const y = Math.round(best.tip - best.dir * k); let ok = k <= k1 && y >= 0 && y < h;
+          if (ok) { for (let dx = -hw; dx <= hw; dx++) if (!bin[y * w + xc + dx]) { ok = false; break; } if (ok && bin[y * w + xc - o2]) ok = false; }
+          if (ok) { len++; if (bin[y * w + xc + o2]) nw = false; } else { if (len >= mt) { runs++; if (nw) narrow++; } len = 0; nw = true; }
+        }
+        if (runs >= 2 && narrow >= 1) bz = true;
+      }
+    }
+  }
+  return { nb: Math.min(3, nb), dir: best.dir, tip: best.tip, x: best.x, bz };
 }
 
 /* ---- 横位置 → 拍(tick) ---- */
@@ -824,7 +842,29 @@ function omrRecognize(g0, w, h, opt) {
       measures.push({ sys: si, idx: measures.length, rs: !!sy.repStart[m], re: !!sy.repEnd[m + 1], x0: xl, x1: xr, c, slots, restsT, ev: evs.map((e, i) => Math.round(e.x) + (e.o ? "n" : "r") + (e.dot ? "." : "") + ":" + qs0[i].t + (qs0[i].tup ? "t" : "")), ts: tsCur, mark: markOf[m] || "", mrN: mr ? Math.max(1, mr.count) : 0, top: sy.st.lines[0], bottom: sy.st.lines[4] });
     }
   });
+  omrHarmonize(measures);
   return { ok: true, skew, gray: g, w, h, S, systems, measures, padL, bpm, tsFound };
+}
+/* 同じ形の小節(音符の並び・楽器・小節内の相対位置がほぼ同じ)が3つ以上あるとき、拍の読み取りがちがう小節は、多数派の読み取りにそろえる。
+ * 同じリズムの小節は楽譜ソフトでも同じ相対位置に並ぶので、位置の差が16分音符の1/3より小さいものだけを同じ形とみなす */
+function omrHarmonize(measures) {
+  const items = [];
+  measures.forEach(m => {
+    if (m.mrN || !m.slots || m.slots.length < 3) return;
+    const W = m.x1 - m.c; if (!(W > 0)) return;
+    const rel = m.slots.map(sl => (sl.heads.reduce((a, h) => a + h.x, 0) / sl.heads.length - m.c) / W);
+    items.push({ m, rel, key: m.ts + "|" + m.slots.map(sl => sl.heads.map(h => h.inst).sort().join("+")).join(",") });
+  });
+  const groups = [];
+  items.forEach(it => { const g = groups.find(g => g.key === it.key && g.rel.every((r, i) => Math.abs(r - it.rel[i]) <= 0.02)); if (g) g.list.push(it); else groups.push({ key: it.key, rel: it.rel, list: [it] }); });
+  groups.forEach(g => {
+    if (g.list.length < 3) return;
+    const votes = {}; g.list.forEach(it => { const k = it.m.slots.map(sl => sl.t + (sl.tup ? "t" : "")).join(" "); votes[k] = (votes[k] || 0) + 1; });
+    const ranked = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+    if (ranked.length < 2 || ranked[0][1] < 2 || ranked[0][1] === ranked[1][1]) return;
+    const win = ranked[0][0].split(" ");
+    g.list.forEach(it => { it.m.slots.forEach((sl, i) => { const w = win[i], tup = w.endsWith("t"); sl.t = parseInt(w, 10); sl.tup = tup; }); it.m.harmonized = true; });
+  });
 }
 
 /* ---- リハーサル記号(四角で囲んだ文字)と、テンポ(♩=数字) ---- */
@@ -886,13 +926,14 @@ function omrToMeasures(res, tsKey) {
     const tk = rm.ts || tsKey || "4/4", ts = tsInfo(tk), n = rm.mrN >= 2 ? rm.mrN : 1;
     const m = newMeasure(tk); m.mark = rm.mark || ""; m.rs = !!rm.rs; m.re = !!rm.re;
     ["up", "down"].forEach(voice => {
-      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
+      const list = rm.slots.map(s => ({ t: s.t, tup: s.tup, gr: s.gr, bz: s.heads.some(q => q.bz && INSTRUMENTS[q.inst].voice === voice), insts: s.heads.map(q => q.inst).filter(i => INSTRUMENTS[i].voice === voice) })).filter(s => s.insts.length);
       list.forEach((s, i) => {
         const next = list[i + 1], nr = (rm.restsT || []).filter(r => r.t > s.t && (voice === "up" ? r.up : r.dn)).map(r => r.t), gap = Math.min(next ? next.t : ts.ticks, ...nr) - s.t;   // 次の音符か、同じ声部の次の休符まで
         let d = s.tup ? (fitDur(Math.min(gap, 32), true) || 8) : fitDur(Math.min(gap, 48), false);
         if (!d) d = 6;
         s.insts.forEach(inst => toggleNote(m, inst, s.t, d, s.tup));
         if (s.gr) { const nn = m[voice].find(x => x.t === s.t); if (nn) { if (s.gr >= 2) nn.dr = true; else nn.fl = true; } }      // 装飾音(フラム/ドラッグ)
+        if (s.bz) { const nn = m[voice].find(x => x.t === s.t); if (nn && !nn.i.every(x => x === "kick" || x === "hh_pedal")) nn.bz = true; }      // バズロール(z印)
       });
     });
     out.push(m);

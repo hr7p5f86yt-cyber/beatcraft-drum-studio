@@ -30,7 +30,7 @@ function buildDock() {
   const dur = document.createElement("div"); dur.className = "dk-row";
   DOCK_DURS.forEach(([v, t]) => dur.appendChild(mk("dk-btn", t, () => setBase(v), { dbase: v })));
   dur.append(mk("dk-btn", "付点", () => $("dotBtn").click(), { ddot: 1 }), mk("dk-btn", "3連", () => $("tupBtn").click(), { dtup: 1 }),
-    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()), mk("dk-btn", "フラム", () => $("flamBtn").click()),
+    mk("dk-btn", "アクセント", () => $("accBtn").click()), mk("dk-btn", "ゴースト", () => $("ghostBtn").click()), mk("dk-btn", "バズ", () => $("buzzBtn").click()), mk("dk-btn", "フラム", () => $("flamBtn").click()),
     mk("dk-btn", "強弱▼", () => cycleDynamic(-1)), mk("dk-btn", "強弱▲", () => cycleDynamic(1)), mk("dk-btn", "連桁", applyBeam), mk("dk-btn", "% 同じ", toggleSimHere), mk("dk-btn", "小節設定", () => { needCursor(); openMeasureModal(state.cursor.m); }),
     mk("dk-btn", "📷 取込", openImport),
     mk("dk-btn", "🥁 音源", () => $("sampleBtn").click()),

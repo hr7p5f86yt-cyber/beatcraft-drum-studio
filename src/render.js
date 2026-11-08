@@ -189,6 +189,10 @@ function measureNotesSvg(it, out) {
         const lx = x - e.hw - 3.5, rx = x + e.hw + 3.5, y0 = e.top - 6, y1 = e.bot + 6, ym = (y0 + y1) / 2;
         s += `<path d="M${f(lx)} ${f(y0)}Q${f(lx - 5)} ${f(ym)} ${f(lx)} ${f(y1)}M${f(rx)} ${f(y0)}Q${f(rx + 5)} ${f(ym)} ${f(rx)} ${f(y1)}" stroke="#000" stroke-width="1.2" fill="none"/>`;
       }
+      if (e.bz && e.info.nv < 192) {                            // バズロール: 符幹をよこぎる「z」印
+        const bx = stemX(e), by = dirUp ? e.end + 17 : e.end - 17;
+        s += `<path d="M${f(bx - 4.5)} ${f(by - 3.5)}L${f(bx + 4.5)} ${f(by - 3.5)}L${f(bx - 4.5)} ${f(by + 3.5)}L${f(bx + 4.5)} ${f(by + 3.5)}" stroke="#000" stroke-width="1.7" fill="none" stroke-linejoin="round"/>`;
+      }
       if (e.acc) {                                              // アクセント >
         const ay = dirUp ? e.end - 8 : e.end + 8, ax = stemX(e);
         s += `<path d="M${f(ax - 5.5)} ${f(ay - 3.6)}L${f(ax + 5)} ${f(ay)}L${f(ax - 5.5)} ${f(ay + 3.6)}" stroke="#000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
