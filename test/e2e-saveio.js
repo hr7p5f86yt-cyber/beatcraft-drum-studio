@@ -22,9 +22,18 @@ const { chromium } = require("playwright"); const path = require("path");
   // PNG保存(PCではダウンロード)
   const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 8000 }).catch(() => null), p.click("#pngBtn")]);
   ck(!!dl && /\.png$/.test(dl.suggestedFilename()), "PNG保存: " + (dl && dl.suggestedFilename()));
+  // PDF保存(A4・複数ページ)
+  await p.evaluate(() => { const s = state.score; s.measures = []; for (let i = 0; i < 60; i++) { const m = newMeasure(); for (let t = 0; t < 192; t += 24) m.up.push({ t, d: 24, tup: false, i: ["hh_close"] }); m.down.push({ t: 0, d: 48, tup: false, i: ["kick"] }); s.measures.push(m); } renderAll(); });
+  const [dp] = await Promise.all([p.waitForEvent("download", { timeout: 20000 }).catch(() => null), p.click("#pdfBtn")]);
+  if (dp) { const path = await dp.path(), buf = require("fs").readFileSync(path), txt = buf.toString("latin1");
+    ck(txt.startsWith("%PDF-1.4") && txt.includes("%%EOF"), "PDF保存: 形式 " + dp.suggestedFilename());
+    const pages = (txt.match(/\/Type \/Page /g) || []).length; ck(pages >= 2 && pages <= 4, "PDF保存: 複数ページ " + pages);
+    ck(txt.includes("/MediaBox [0 0 595.28 841.89]"), "PDF保存: A4"); } else ck(false, "PDFがダウンロードされない");
   // iPad想定: 共有シートでファイルを渡す
   await p.evaluate(() => { window.__shared = null; Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true }); Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true }); navigator.canShare = () => true; navigator.share = async d => { window.__shared = d.files.map(f => f.name + ":" + f.type); }; });
-  await p.click("#pngBtn"); await p.waitForTimeout(800);
+  await p.click("#pngBtn"); await p.waitForTimeout(3000);
   const sh = await p.evaluate(() => window.__shared); ck(sh && /\.png:image\/png$/.test(sh[0]), "iPad想定: 共有シートにPNGを渡す " + JSON.stringify(sh));
+  await p.evaluate(() => { window.__shared = null; }); await p.click("#pdfBtn"); await p.waitForTimeout(3000);
+  const sh2 = await p.evaluate(() => window.__shared); ck(sh2 && /\.pdf:application\/pdf$/.test(sh2[0]), "iPad想定: 共有シートにPDFを渡す " + JSON.stringify(sh2));
   console.log(errs.length ? "ERRORS " + errs.join("|") : "no page errors"); if (bad || errs.length) process.exitCode = 1; else console.log("ALL PASSED"); await b.close();
 })();

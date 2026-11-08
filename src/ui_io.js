@@ -150,6 +150,74 @@ function exportPng() {
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   } catch (e) { showStatus("PNG出力に失敗しました: " + e.message, "err"); }
 }
+/* ---- A4 の複数ページ PDF(外部ライブラリなし: 各ページを画像にして PDF に並べる) ---- */
+const PDF_PAGE = { W: 595.28, H: 841.89, PX: 2100 };
+function pdfPaginate(lay) {
+  // 段(sysTop が同じ小節のまとまり)ごとに、1ページに入るだけ積む。段の途中では切らない
+  const L = LAYOUT, pageH = L.PAGE_W * PDF_PAGE.H / PDF_PAGE.W, top = 36, bottom = 40, usable = pageH - top - bottom;
+  const rows = []; lay.measures.forEach(m => { if (m.hidden) return; if (!rows.length || rows[rows.length - 1].top !== m.sysTop) rows.push({ top: m.sysTop, bottom: m.sysBottom + L.ROW_GAP / 2 }); });
+  const pages = []; let cur = null;
+  rows.forEach((r, i) => {
+    const y0 = i === 0 ? 0 : r.top - L.ROW_GAP / 2;                                    // 1段目は題名の分も含める
+    if (!cur || r.bottom - cur.y0 > (pages.length === 0 ? usable : usable)) { cur = { y0: i === 0 ? 0 : y0, y1: r.bottom }; pages.push(cur); }
+    else cur.y1 = r.bottom;
+  });
+  if (!pages.length) pages.push({ y0: 0, y1: lay.height });
+  pages[pages.length - 1].y1 = Math.max(pages[pages.length - 1].y1, Math.min(lay.height, pages[pages.length - 1].y1 + 20));
+  return { pages, pageH, top, bottom };
+}
+function buildPdfBytes(jpegs) {                                                       // jpegs: [{bytes, w, h}]
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const push = d => { const u = typeof d === "string" ? enc.encode(d) : d; parts.push(u); len += u.length; };
+  const obj = (n, body) => { offs[n] = len; push(n + " 0 obj\n"); if (typeof body === "string") push(body); else body.forEach(push); push("\nendobj\n"); };
+  push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  const N = jpegs.length, kids = jpegs.map((_, i) => (3 + i * 3) + " 0 R").join(" ");
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, "<< /Type /Pages /Kids [" + kids + "] /Count " + N + " >>");
+  jpegs.forEach((j, i) => {
+    const pn = 3 + i * 3, cn = pn + 1, im = pn + 2, cs = "q " + PDF_PAGE.W + " 0 0 " + PDF_PAGE.H + " 0 0 cm /Im0 Do Q";
+    obj(pn, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + PDF_PAGE.W + " " + PDF_PAGE.H + "] /Resources << /XObject << /Im0 " + im + " 0 R >> >> /Contents " + cn + " 0 R >>");
+    obj(cn, "<< /Length " + cs.length + " >>\nstream\n" + cs + "\nendstream");
+    obj(im, ["<< /Type /XObject /Subtype /Image /Width " + j.w + " /Height " + j.h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + j.bytes.length + " >>\nstream\n", j.bytes, "\nendstream"]);
+  });
+  const xr = len, total = 3 + N * 3;
+  push("xref\n0 " + total + "\n0000000000 65535 f \n");
+  for (let n = 1; n < total; n++) push(String(offs[n]).padStart(10, "0") + " 00000 n \n");
+  push("trailer\n<< /Size " + total + " /Root 1 0 R >>\nstartxref\n" + xr + "\n%%EOF\n");
+  const out = new Uint8Array(len); let p = 0; parts.forEach(u => { out.set(u, p); p += u.length; }); return out;
+}
+async function pdfPages() {
+  const r = buildScoreSvg(state.score), svg = scoreToSvgDocument(state.score);
+  const img = await new Promise((ok, ng) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ng(new Error("画像化できませんでした")); i.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+  const pg = pdfPaginate(r.layout), W = PDF_PAGE.PX, k = W / LAYOUT.PAGE_W, H = Math.round(W * PDF_PAGE.H / PDF_PAGE.W), out = [];
+  for (let i = 0; i < pg.pages.length; i++) {
+    const P = pg.pages[i], c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+    const sh = Math.min(P.y1, r.height) - P.y0;
+    g.drawImage(img, 0, P.y0, LAYOUT.PAGE_W, sh, 0, pg.top * k, W, sh * k);
+    g.fillStyle = "#777"; g.font = Math.round(9 * k) + "px sans-serif"; g.textBaseline = "alphabetic";
+    g.textAlign = "left"; g.fillText((state.score.title || "") + "  -  BeatCraft Drum Studio", LAYOUT.MARGIN * k, H - 16 * k);
+    g.textAlign = "right"; g.fillText((i + 1) + " / " + pg.pages.length, (LAYOUT.PAGE_W - LAYOUT.MARGIN) * k, H - 16 * k);
+    const url = c.toDataURL("image/jpeg", 0.95), bin = atob(url.slice(url.indexOf(",") + 1)), bytes = new Uint8Array(bin.length);
+    for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+    out.push({ bytes, w: W, h: H });
+  }
+  return out;
+}
+async function exportPdf() {
+  try {
+    showStatus("PDFを作っています…");
+    const bytes = buildPdfBytes(await pdfPages()), name = safeName() + ".pdf", blob = new Blob([bytes], { type: "application/pdf" });
+    try {
+      const f = new File([blob], name, { type: "application/pdf" });
+      if (isTouchApple() && navigator.canShare && navigator.canShare({ files: [f] })) {
+        try { await navigator.share({ files: [f], title: state.score.title || "楽譜" }); showStatus("共有メニューで「“ファイル”に保存」を選ぶと保存できます"); return; }
+        catch (e) { if (e && e.name === "AbortError") return; }
+      }
+    } catch (e) { /* ダウンロードへ */ }
+    downloadBlob(blob, name); showStatus("PDFを保存しました(A4・" + Math.ceil(bytes.length / 1024) + "KB)");
+  } catch (e) { showStatus("PDF出力に失敗しました: " + e.message + "(PNG保存をお試しください)", "err"); }
+}
 function printScore() {
   try { window.print(); } catch (e) { showStatus("印刷を開始できません: " + e.message + "(SVG/PNG保存をお試しください)", "err"); }
 }
@@ -230,7 +298,7 @@ function bindEvents() {
   on("modeErase", "click", () => { state.mode = "erase"; updateButtons(); });
   on("addMeasureBtn", "click", addMeasure); on("delMeasureBtn", "click", removeLastMeasure);
   on("saveBtn", "click", openSaveModal); on("overwriteBtn", "click", overwriteSave); on("loadBtn", "click", openLoadModal); on("saveOk", "click", executeSave);
-  on("svgBtn", "click", exportSvg); on("pngBtn", "click", exportPng); on("printBtn", "click", printScore); on("testBtn", "click", runSelfTest);
+  on("svgBtn", "click", exportSvg); on("pngBtn", "click", exportPng); on("pdfBtn", "click", exportPdf); on("printBtn", "click", printScore); on("testBtn", "click", runSelfTest);
   on("measureOk", "click", applyMeasureModal); on("measureInsert", "click", insertMeasureAfter);
   on("measureClear", "click", clearMeasure); on("measureDelete", "click", deleteMeasure);
   on("backupExport", "click", backupExport); on("backupCopy", "click", backupCopy); on("backupImport", "click", backupImport);
