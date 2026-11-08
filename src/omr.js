@@ -293,17 +293,32 @@ function omrAnalyzeStaff(bin, w, h, st) {
     const t = omrReadTsDigits(topI, xa, Math.round(y0 - 0.1 * S), xb, Math.round(y2), gap, "234567".split("")), b = omrReadTsDigits(botI, xa, Math.round(y2 + 1), xb, Math.round(y4 + 0.5 * S), gap, "248".split(""));
     if (!t || !b) return null; const key = t.text + "/" + b.text; return TIME_SIGS[key] ? key : null;
   };
+  const stemIn = c => {                                           // 五線の外へ「つながって」のびる縦線(符幹)があるか。上の囲み文字(リハーサル記号)のふちは、五線につながらないので含めない
+    for (let x = c.a; x <= c.b; x++) {
+      let up = true, dn = true;
+      for (let y = Math.round(y0 - 0.7 * S) - ry0; y <= Math.round(y0) - ry0 && up; y++) if (y < 0 || !B[y * rw + x]) up = false;
+      for (let y = Math.round(y4) - ry0; y <= Math.round(y4 + 0.7 * S) - ry0 && dn; y++) if (y >= rh || !B[y * rw + x]) dn = false;
+      if (up || dn) return true;
+    } return false;
+  };
+  const outOf = c => c.out && stemIn(c);
   for (let m = 1; m < barX.length - 1; m++) {
     const xs = barX[m] - rx0 + 1, k = clusters.findIndex(c => c.a >= xs - 2 && c.a - xs <= 3 * S);
     if (k < 0) continue; const c0 = clusters[k];
-    if (c0.out || c0.b - c0.a > 3.8 * S || !tsLike(c0.a, c0.b)) continue;
+    if (outOf(c0) || c0.b - c0.a > 3.8 * S || !tsLike(c0.a, c0.b)) continue;
     let end = c0.b;
-    for (let j = k + 1; j < clusters.length; j++) { const c = clusters[j]; if (c.a - end <= 1.2 * S && !c.out && c.b - c.a <= 2.2 * S && tsLike(c.a, c.b)) end = c.b; else break; }
+    for (let j = k + 1; j < clusters.length; j++) { const c = clusters[j]; if (c.a - end <= 1.2 * S && !outOf(c) && c.b - c.a <= 2.2 * S && tsLike(c.a, c.b)) end = c.b; else break; }
     zonesAt[m] = rx0 + end; tsRead[m] = readTs(c0.a + rx0, rx0 + end);
   }
   if (zoneEnd > rx0) {                                          // 1小節目: 音部記号のあとに続く拍子記号
     const tc = clusters.filter(c => rx0 + c.b <= zoneEnd + 1 && tsLike(c.a, c.b));
-    if (tc.length) tsRead[0] = readTs(rx0 + tc[0].a, rx0 + tc[tc.length - 1].b);
+    if (tc.length) {
+      tsRead[0] = readTs(rx0 + tc[0].a, rx0 + tc[tc.length - 1].b);
+      if (!tsRead[0]) {                                           // 音部記号と拍子記号がくっついた塊: 白い縦のすきまごとに、そこから右だけを拍子記号として読んでみる
+        const xe = tc[tc.length - 1].b;
+        for (let x = tc[0].a + 1; x < xe - 0.5 * S && !tsRead[0]; x++) if (!colIn[x - 1] || (colIn[x] && !colIn[x - 1])) { if (colIn[x] && !colIn[x - 1]) tsRead[0] = readTs(rx0 + x, rx0 + xe); }
+      }
+    }
   }
   const inZone = x => { if (x <= zoneEnd + 0.3 * S) return true; for (const m in zonesAt) if (x >= barX[m] && x <= zonesAt[m] + 0.3 * S) return true; return false; };
 
@@ -790,6 +805,11 @@ function omrRecognize(g0, w, h, opt) {
        const e = evs.find(e => Math.abs(e.x - r.x) <= 0.6 * S); if (e) { if (!e.o) { e.dot = e.dot || r.dot; e.up = e.up || r.up; e.dn = e.dn || r.dn; } else { e.rup = e.rup || r.up; e.rdn = e.rdn || r.dn; } } else evs.push({ x: r.x, qx: r.x, o: null, half: !!r.half, dot: !!r.dot, up: r.up, dn: r.dn }); });
       evs.sort((a, b) => a.x - b.x);
       const qs0 = omrQuantize(evs.map(e => e.qx), c, W, T, S, padL, m === 0 || !!zoneEndM, evs.map(e => e.o ? e.o.heads.some(q => q.dot) : !!e.dot), evs.map(e => e.o ? Math.max(0, ...e.o.heads.map(q => q.sd ? q.nb : 0)) : 0)), qs = [];
+      evs.forEach((e, i) => {                                      // 32分音符(連桁が3本)の根拠がないのに、16分の格子からはずれた位置(6, 18, 30…)になったものは、いちばん近い16分の位置へ寄せる
+        const q = qs0[i]; if (q.tup || q.t % 12 === 0 || q.t % 6 !== 0) return;
+        if (e.o && e.o.heads.some(h => h.sd && h.nb >= 3)) return;
+        const t2 = Math.round(q.t / 12) * 12; if (t2 <= 0 || t2 >= T || qs0.some((r, k) => k !== i && !r.tup && r.t === t2 && !!evs[k].o === !!e.o)) return; q.t = t2;
+      });
       evs.forEach((e, i) => {                                      // 2分休符(長さが96とわかっている)は、拍の頭に置き、次の音をその96あとに合わせる
         if (e.o || !e.half || qs0[i].tup) return; const t0 = qs0[i].t, t1 = Math.floor((t0 + 11) / 24) * 24, nx = qs0[i + 1];
         if (!nx || nx.tup || Math.abs(nx.t - (t1 + 96)) > 12 || (i > 0 && qs0[i - 1].t >= t1)) return;
