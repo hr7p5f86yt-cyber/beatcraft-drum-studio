@@ -413,6 +413,8 @@ function omrAnalyzeStaff(bin, w, h, st) {
       const fr = hit / (2 * (2 * rc + 1)); if (fr < 0.8) continue;
       const gap = C[(y - rg) * rw + x] + C[(y + rg) * rw + x] + C[y * rw + x - rg] + C[y * rw + x + rg];
       if (gap > 2 || (gap === 2 && fr < 0.93)) continue;
+      { let vu = 0, vd = 0, hl = 0, hr = 0; while (vu < 3 * rg && B[(y - vu - 1) * rw + x]) vu++; while (vd < 3 * rg && B[(y + vd + 1) * rw + x]) vd++; while (hl < 4 * rg && B[y * rw + x - hl - 1]) hl++; while (hr < 4 * rg && B[y * rw + x + hr + 1]) hr++;
+        if (vu + vd + 1 >= 0.4 * S && hl + hr + 1 >= 0.9 * S) { const dn = ex => { let n = 0; for (let k = vd + 2; k <= vd + 1 + Math.round(1.2 * S) && y + k < rh; k++) { if (B[(y + k) * rw + ex] || B[(y + k) * rw + ex - 1] || B[(y + k) * rw + ex + 1]) n++; else break; } return n >= 1.0 * S; }; if (dn(x - hl) || dn(x + hr)) continue; } }   // 連桁(太い横線)のうえで、その端から符幹が下にのびている = 連桁を×と見間違えたもの
       if (y > yUpMax && y < yPedMin && gap > 0) continue;                                  // 五線の中の×は、4方向すべてのすきまが白いものだけ(黒い符頭を×と見間違えない)
       cand.push({ x, y, sc: fr - 0.3 * gap });
     }
@@ -525,6 +527,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       if (cy < yTop || cy > yBot || inZone(rx0 + c.maxx)) continue;
       if (heads.some(q => Math.abs(q.x - cx) < 0.75 * S && Math.abs(q.y - cy) < 1.0 * S) || rings.some(q => Math.abs(q.cx - cx) < 0.75 * S && Math.abs(q.cy - cy) < 1.0 * S)) continue;
       if (graces.some(g => Math.abs(g.x - cx) < 0.9 * S && Math.abs(g.y - cy) < 1.5 * S)) continue;      // 装飾音の符幹・斜線
+      if (cx < Math.max(barX[0], zoneEnd) + 3.2 * S && bh >= 1.8 && bh <= 2.8 && bw <= 1.1 && c.area >= 0.8 * c.w * c.h && Math.abs(cy - st.lines[2]) < 0.5 * S) continue;      // 画像がぼやけて音部記号の太い2本線が離れて見えたもの
       const L = rx0 + c.minx; if (stemXs.some(sx => sx >= L - 0.45 * S && sx <= L + 0.25 * S)) continue;      // 符幹にくっついた旗
       rests.push({ x: cx, y: cy, w: c.w, h: c.h, L, R: rx0 + c.maxx, up: cy < st.lines[2], dn: cy >= st.lines[2] - 0.3 * S, half: c.w >= 1.5 * c.h && cy > y0 + 1.4 * S && cy < st.lines[2] });
     }
