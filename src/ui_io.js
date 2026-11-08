@@ -39,6 +39,16 @@ function readList() {
   catch (e) { return { ok: false, error: "保存リストが壊れています: " + e.message }; }
 }
 
+/* 上書き保存: 今のタイトルが保存リストにあれば、確認なしでそのまま保存。なければ「保存」画面を開く */
+function overwriteSave() {
+  const title = (state.score.title || "").trim(); if (!title) { openSaveModal(); return; }
+  const rl = readList(); if (!rl.ok) { showStatus("保存できません: " + rl.error, "err"); return; }
+  const idx = rl.list.findIndex(s => s && s.title === title); if (idx < 0) { openSaveModal(); return; }
+  rl.list[idx] = JSON.parse(JSON.stringify(state.score));
+  const w = storageSet(KEY_LIST, JSON.stringify(rl.list));
+  if (!w.ok) { showStatus("保存に失敗しました: " + w.error + "(バックアップ機能をお使いください)", "err"); return; }
+  autoSave(); showStatus(`「${title}」を上書き保存しました`);
+}
 function openSaveModal() { $("saveTitleInput").value = state.score.title; $("saveModal").classList.add("show"); }
 function executeSave() {
   const title = $("saveTitleInput").value.trim() || "マイ・ドラム・スコア";
@@ -113,6 +123,19 @@ function exportSvg() {
   try { downloadBlob(new Blob([scoreToSvgDocument(state.score)], { type: "image/svg+xml;charset=utf-8" }), safeName() + ".svg"); showStatus("SVGを保存しました"); }
   catch (e) { showStatus("SVG保存に失敗しました: " + e.message, "err"); }
 }
+/* iPad/iPhone: ダウンロードだと別ページが開いて手順が多いので、共有シートから「画像を保存」を直接選べるようにする。使えない/やめたときは通常のダウンロード */
+function isTouchApple() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+async function savePngBlob(blob) {
+  const name = safeName() + ".png";
+  try {
+    const f = new File([blob], name, { type: "image/png" });
+    if (isTouchApple() && navigator.canShare && navigator.canShare({ files: [f] })) {
+      try { await navigator.share({ files: [f], title: state.score.title || "楽譜" }); showStatus("共有メニューで「画像を保存」を選ぶと、写真に保存できます"); return; }
+      catch (e) { if (e && e.name === "AbortError") return; /* 共有できないときは下のダウンロードへ */ }
+    }
+  } catch (e) { /* ダウンロードへ */ }
+  downloadBlob(blob, name); showStatus("PNGを保存しました");
+}
 function exportPng() {
   try {
     const svg = scoreToSvgDocument(state.score), r = state.view, img = new Image();
@@ -120,7 +143,7 @@ function exportPng() {
       try {
         const c = document.createElement("canvas"); c.width = r.width * 2; c.height = r.height * 2;
         const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
-        c.toBlob(b => { if (!b) { showStatus("PNG変換に失敗しました。SVG保存をお試しください", "err"); return; } downloadBlob(b, safeName() + ".png"); showStatus("PNGを保存しました"); }, "image/png");
+        c.toBlob(b => { if (!b) { showStatus("PNG変換に失敗しました。SVG保存をお試しください", "err"); return; } savePngBlob(b); }, "image/png");
       } catch (e) { showStatus("PNG出力に失敗しました: " + e.message + "(SVG保存をお試しください)", "err"); }
     };
     img.onerror = () => showStatus("PNG出力に失敗しました。SVG保存をお試しください", "err");
@@ -206,7 +229,7 @@ function bindEvents() {
   on("roomRange", "input", e => setRoom(e.target.value / 100));
   on("modeErase", "click", () => { state.mode = "erase"; updateButtons(); });
   on("addMeasureBtn", "click", addMeasure); on("delMeasureBtn", "click", removeLastMeasure);
-  on("saveBtn", "click", openSaveModal); on("loadBtn", "click", openLoadModal); on("saveOk", "click", executeSave);
+  on("saveBtn", "click", openSaveModal); on("overwriteBtn", "click", overwriteSave); on("loadBtn", "click", openLoadModal); on("saveOk", "click", executeSave);
   on("svgBtn", "click", exportSvg); on("pngBtn", "click", exportPng); on("printBtn", "click", printScore); on("testBtn", "click", runSelfTest);
   on("measureOk", "click", applyMeasureModal); on("measureInsert", "click", insertMeasureAfter);
   on("measureClear", "click", clearMeasure); on("measureDelete", "click", deleteMeasure);
