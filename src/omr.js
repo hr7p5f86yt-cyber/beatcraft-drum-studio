@@ -464,6 +464,14 @@ function omrAnalyzeStaff(bin, w, h, st) {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < by0 || nx >= rw || ny > by1) continue; const r2 = ny * rw + nx; if (E[r2] && !seen[r2]) { seen[r2] = 1; stack.push(r2); } }
     }
     const cw = maxx - minx + 1, ch = maxy - miny + 1;
+    if (n >= 0.06 * S * S && cw <= 1.3 * S && ch > 1.1 * S && ch + 2 * er <= 3.5 * S) {   // 和音で縦につながった符頭(1スペースずつずれた丸が重なる): 個数ぶんに分ける
+      const Ho = ch + 2 * er, k = Math.max(2, Math.round((Ho - 0.9 * S) / S) + 1), c = { minx: Math.round(minx - er), maxx: Math.round(maxx + er), miny: Math.round(miny - er), maxy: Math.round(maxy + er) };
+      if (hasStem(c) || k >= 2) for (let j = 0; j < k; j++) {
+        const oy = ry0 + miny - er + 0.45 * S + j * (Ho - 0.9 * S) / (k - 1), ox = rx0 + sx / n, hh = (oy - y0) / (S / 2);
+        if (hh >= 0.3 && hh <= 8.6 && !heads.some(q => Math.abs(q.x - ox) < 0.3 * S && Math.abs(q.y - oy) < 0.6 * S)) heads.push({ x: ox, y: oy, kind: "oval" });
+      }
+      continue;
+    }
     if (n < 0.06 * S * S || cw > 1.3 * S || ch > 1.1 * S) continue;
     const c = { minx: Math.round(minx - er), maxx: Math.round(maxx + er), miny: Math.round(miny - er), maxy: Math.round(maxy + er) };
     const hh = (ry0 + sy / n - y0) / (S / 2), ox = rx0 + sx / n, oy = ry0 + sy / n;
@@ -715,6 +723,13 @@ function omrQuantize(xs, c, W, T, S, padL, first, dots, nbs) {
       if (best) {
         return best.t.map(v => ({ t: v, tup: false }));
       }
+    }
+  }
+  if (r0.some(q => q.tup)) {                                           // 3連符なら、組の音の連桁の本数はそろうはず。そろわない(8分と16分が混ざる)なら、3連符ではなく16分の並びとして読みなおす
+    const nbT = nbs.filter((v, i) => r0[i].tup && v > 0);
+    if (nbT.length >= 2 && new Set(nbT).size > 1) {
+      const d16 = omrQuantizeDP(xs, T, S, c + W, dots || xs.map(() => false), first ? undefined : c + padL, true, true);
+      if (d16 && !d16.res.some((q, i) => i > 0 && q.t === d16.res[i - 1].t) && d16.cost / xs.length < 0.25) return d16.res;
     }
   }
   const v0 = viol(r0); if (!v0) return r0;
