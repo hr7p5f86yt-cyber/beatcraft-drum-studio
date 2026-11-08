@@ -88,7 +88,7 @@ body.has-dock .toast{bottom:200px}
 </head>
 <body>
 <header class="no-print">
-  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.17.0</span></h1>
+  <h1>🥁 BeatCraft Drum Studio <span class="badge">v8.17.1</span></h1>
   <div class="group">
     <button id="advBtn" title="細かい操作パネルを開く/閉じる">⚙ 詳細</button><button id="overwriteBtn" title="今の題名のまま、保存済みの楽譜に上書きします(まだ保存していなければ保存画面が開きます)">💾 上書き</button><button id="saveBtn">💾 保存</button><button id="loadBtn">📂 開く</button>
     <button id="testBtn" class="small" title="自己テスト">🧪 テスト</button>
@@ -1820,8 +1820,13 @@ function omrAnalyzeStaff(bin, w, h, st) {
   {
     const yTop = Math.round(y0 - 0.3 * S), yBot = Math.round(y4 + 0.6 * S), stemXs = [];
     for (let x = 0; x < rw; x++) { for (let y = Math.max(0, yTop - ry0 - Math.round(2 * S)); y <= Math.min(rh - 1, yBot - ry0 + Math.round(2 * S)); y++) if (B[y * rw + x] && !C[y * rw + x] && vr[y * rw + x] >= 1.7 * S) { stemXs.push(rx0 + x); break; } }
+    const endX = barX[barX.length - 1], endTs = new Set();              // 行末の予告拍子記号(次の行の拍子変更): 上下2つの数字が小節線の手前にある
+    { const cs = comps.filter(c => { const cx = rx0 + (c.minx + c.maxx) / 2; return cx > endX - 3.4 * S && cx < endX - 0.3 * S && c.h <= 4.8 * S && c.w <= 2.2 * S && !heads.some(q => q.x > rx0 + c.minx - 0.5 * S && q.x < rx0 + c.maxx + 0.5 * S && q.y > ry0 + c.miny - 0.5 * S && q.y < ry0 + c.maxy + 0.5 * S); });
+      if (cs.length) { const lo = Math.min(...cs.map(c => ry0 + c.miny)), hi = Math.max(...cs.map(c => ry0 + c.maxy)), xl = Math.min(...cs.map(c => rx0 + c.minx));
+        if (lo < st.lines[2] - 0.6 * S && hi > st.lines[2] + 0.6 * S && hi - lo >= 3.0 * S && hi - lo <= 4.6 * S && xl > endX - 3.4 * S) cs.forEach(c => endTs.add(c)); } }
     for (const c of comps) {
       const bw = c.w / S, bh = c.h / S, cx = rx0 + (c.minx + c.maxx) / 2, cy = ry0 + (c.miny + c.maxy) / 2;
+      if (endTs.has(c)) continue;
       if (c.area < 0.22 * S * S || bw < 0.5 || bw > 1.8 || bh < 0.35 || bh > 3.4) continue;
       if (cy < yTop || cy > yBot || inZone(rx0 + c.maxx)) continue;
       if (heads.some(q => Math.abs(q.x - cx) < 0.75 * S && Math.abs(q.y - cy) < 1.0 * S) || rings.some(q => Math.abs(q.cx - cx) < 0.75 * S && Math.abs(q.cy - cy) < 1.0 * S)) continue;
