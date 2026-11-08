@@ -464,7 +464,7 @@ function omrAnalyzeStaff(bin, w, h, st) {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < by0 || nx >= rw || ny > by1) continue; const r2 = ny * rw + nx; if (E[r2] && !seen[r2]) { seen[r2] = 1; stack.push(r2); } }
     }
     const cw = maxx - minx + 1, ch = maxy - miny + 1;
-    if (n >= 0.06 * S * S && cw <= 1.3 * S && ch > 1.1 * S && ch + 2 * er <= 3.5 * S) {   // 和音で縦につながった符頭(1スペースずつずれた丸が重なる): 個数ぶんに分ける
+    if (n >= 0.06 * S * S && cw >= 0.55 * S && cw <= 1.3 * S && ch > 1.1 * S && ch + 2 * er <= 3.5 * S && rx0 + minx > zoneEnd + 0.4 * S && n >= 0.5 * cw * ch) {   // 和音で縦につながった符頭(1スペースずつずれた丸が重なる): 個数ぶんに分ける
       const Ho = ch + 2 * er, k = Math.max(2, Math.round((Ho - 0.9 * S) / S) + 1), c = { minx: Math.round(minx - er), maxx: Math.round(maxx + er), miny: Math.round(miny - er), maxy: Math.round(maxy + er) };
       if (hasStem(c) || k >= 2) for (let j = 0; j < k; j++) {
         const oy = ry0 + miny - er + 0.45 * S + j * (Ho - 0.9 * S) / (k - 1), ox = rx0 + sx / n, hh = (oy - y0) / (S / 2);
